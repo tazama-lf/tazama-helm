@@ -14,16 +14,16 @@ image:
   # The image tag is intentionally left blank.
   # It is dynamically set by the CI/CD pipeline during deployment
   # based on the version in package.json.
-  tag: ""
+  tag: "4.0.0"
 
 sidecar:
-  name: tms-sidecar-rel-1-0-0
+  name: tms-sidecar-rel-4-0-0
   image:
     repository: tazamaorg/tms-service
     # The image tag is intentionally left blank.
     # It is dynamically set by the CI/CD pipeline during deployment
     # based on the version in package.json.
-    tag: ""
+    tag: "4.0.0"
     pullPolicy: Always
   port: 5000
 
