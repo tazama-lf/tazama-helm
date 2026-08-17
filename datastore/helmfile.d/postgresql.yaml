@@ -10,5 +10,8 @@ releases:
     chart: postgresql/postgres
     version: 1.6.7
     installed: {{ if hasKey .Values "installPostgresql" }}{{ .Values.installPostgresql | default true }}{{ else }}true{{ end }}
+    labels:
+      tier: db
+      env: dev
     values:
       - ../values/postgresql-values.yaml

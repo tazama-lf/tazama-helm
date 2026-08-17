@@ -10,5 +10,8 @@ releases:
     chart: valkey/valkey
     version: 0.11.0
     installed: {{ if hasKey .Values "installValkey" }}{{ .Values.installValkey | default true }}{{ else }}true{{ end }}
+    labels:
+      tier: auxiliary
+      env: dev
     values:
       - ../values/valkey-values.yaml

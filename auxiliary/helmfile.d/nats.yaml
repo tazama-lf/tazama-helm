@@ -10,5 +10,8 @@ releases:
     chart: nats/nats
     version: 2.14.4
     installed: {{ if hasKey .Values "installNats" }}{{ .Values.installNats | default true }}{{ else }}true{{ end }}
+    labels:
+      tier: auxiliary
+      env: dev
     values:
       - ../values/nats-values.yaml

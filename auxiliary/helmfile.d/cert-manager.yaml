@@ -10,6 +10,9 @@ releases:
     chart: jetstack/cert-manager
     version: v1.17.2
     createNamespace: true
+    labels:
+      tier: auxiliary
+      env: dev
     values:
       - ../values/cert-manager-values.yaml
 

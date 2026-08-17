@@ -11,5 +11,8 @@ releases:
     version: 4.11.2
     createNamespace: true
     installed: {{ if hasKey .Values "installNginxIngress" }}{{ .Values.installNginxIngress | default true }}{{ else }}true{{ end }}
+    labels:
+      tier: auxiliary
+      env: dev
     values:
       - ../values/nginx-ingress-values.yaml

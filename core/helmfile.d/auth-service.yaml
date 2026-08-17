@@ -8,5 +8,8 @@ releases:
     chart: oci://docker.io/tazamaorg/auth-service-helm
     version: 4.0.0
     installed: {{ if hasKey .Values "installAuthService" }}{{ .Values.installAuthService | default true }}{{ else }}true{{ end }}
+    labels:
+      tier: core
+      env: dev
     values:
       - ../values/auth-service-values.yaml
