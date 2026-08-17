@@ -8,10 +8,6 @@ values:
 
 #  - ./values/rule-901-service-values.yaml
 #  - ./values/auth-service-values.yaml
-#  - ./values/batch-ppa-values.yaml
-#  - ./values/nginx-ingress-values.yaml
-#  - ./values/postgresql-values.yaml
-#  - ./values/cert-manager-values.yaml
 
 # Set default Helm options for all releases.
 # These can be overridden on a per-release basis if needed.
@@ -32,9 +28,3 @@ helmfiles:
   - datastore/helmfile.d/*.yaml
   - auxiliary/helmfile.d/*.yaml
   - core/helmfile.d/*.yaml
-
-#  - helmfile.d/cert-manager.yaml
-#  - helmfile.d/nginx-ingress.yaml
-#  - helmfile.d/postgresql.yaml
-#  - helmfile.d/auth-service.yaml
-#  - helmfile.d/batch-ppa.yaml
