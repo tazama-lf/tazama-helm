@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+
+repositories:
+  - name: nats
+    url: https://nats-io.github.io/k8s/helm/charts/
+
+releases:
+  - name: nats
+    namespace: processor
+    chart: nats/nats
+    version: 2.14.4
+    installed: {{ if hasKey .Values "installNats" }}{{ .Values.installNats | default true }}{{ else }}true{{ end }}
+    values:
+      - ../values/nats-values.yaml

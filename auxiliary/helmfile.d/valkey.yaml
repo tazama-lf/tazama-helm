@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+
+repositories:
+  - name: valkey
+    url: https://valkey.io/valkey-helm
+
+releases:
+  - name: valkey
+    namespace: processor
+    chart: valkey/valkey
+    version: 0.11.0
+    installed: {{ if hasKey .Values "installValkey" }}{{ .Values.installValkey | default true }}{{ else }}true{{ end }}
+    values:
+      - ../values/valkey-values.yaml

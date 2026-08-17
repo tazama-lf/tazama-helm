@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# Enable or disable the NATS release from the Helmfile values.
+installNats: true
+
+# The release name produces the in-cluster service name nats, used by the
+# application services.
+fullnameOverride: nats
+
+# Run one standalone NATS server. Clustering is unnecessary for this instance.
+config:
+  cluster:
+    enabled: false
+  nats:
+    port: 4222
+  monitor:
+    enabled: true
+    port: 8222
+  jetstream:
+    enabled: true
+    fileStore:
+      enabled: true
+      dir: /data
+      pvc:
+        enabled: true
+        size: 8Gi
+    memoryStore:
+      enabled: true
+      maxSize: 128Mi
+
+service:
+  type: ClusterIP
+  enabled: true
+  ports:
+    nats:
+      enabled: true
+    monitor:
+      enabled: false
+    cluster:
+      enabled: false
+    leafnodes:
+      enabled: false
+    websocket:
+      enabled: false
+    mqtt:
+      enabled: false
+    gateway:
+      enabled: false
+    profiling:
+      enabled: false
+
+# The nats-box is a troubleshooting client and is not required by Tazama.
+natsBox:
+  enabled: false
+
+container:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

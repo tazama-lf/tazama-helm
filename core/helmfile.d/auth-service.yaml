@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+
+releases:
+  # Another microservice
+  - name: auth-service
+    namespace: processor
+    # When using OCI, the full URI must be specified in the chart field.
+    chart: oci://docker.io/tazamaorg/auth-service-helm
+    version: 4.0.0
+    installed: {{ if hasKey .Values "installAuthService" }}{{ .Values.installAuthService | default true }}{{ else }}true{{ end }}
+    values:
+      - ../values/auth-service-values.yaml

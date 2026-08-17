@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: Uninstall Tazama Helm Charts
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Set up Kubeconfig
+        # To ensure helmfile can connect to the cluster, we must place the kubeconfig in the default location.
+        # The secret is base64 encoded, so it must be decoded before use.
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG_DATA }}" | base64 --decode > ~/.kube/config
+
+      - name: Login to OCI Registry (Docker Hub)
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Uninstall Tazama charts
+        # Using the official helmfile-action action.
+        # It handles setup of helm and helmfile, and runs the specified command.
+#        uses: helmfile/helmfile-action@v2.3.1
+        uses: helmfile/helmfile-action@1f44bcb43e5fb17ecb2685d8b6081ec5f6aa5fcf
+        with:
+          helmfile-version: 'v0.160.0'
+          # Pinning the Helm version to a known compatible release to avoid breaking changes.
+          helm-version: 'v3.13.3'
+          # The helm-diff plugin is useful for seeing changes before they are applied.
+          helm-plugins: 'https://github.com/databus23/helm-diff@629d13ca28b4ee5abb55401dc635631b2a77ed61'
+          helmfile-args: '--file helmfile.yaml destroy'

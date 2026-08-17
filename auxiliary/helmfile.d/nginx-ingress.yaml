@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+
+repositories:
+  - name: ingress-nginx
+    url: https://kubernetes.github.io/ingress-nginx
+
+releases:
+  - name: ingress-nginx
+    namespace: ingress-nginx
+    chart: ingress-nginx/ingress-nginx
+    version: 4.11.2
+    createNamespace: true
+    installed: {{ if hasKey .Values "installNginxIngress" }}{{ .Values.installNginxIngress | default true }}{{ else }}true{{ end }}
+    values:
+      - ../values/nginx-ingress-values.yaml
