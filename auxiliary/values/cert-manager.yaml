@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# Install the Certificate, CertificateRequest, Issuer, and ClusterIssuer CRDs.
+installCRDs: true
+
+# Keep the controller components lightweight for a single-cluster deployment.
+replicaCount: 1
+cainjector:
+  replicaCount: 1
+webhook:
+  replicaCount: 1

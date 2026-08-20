@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+
+repositories:
+  - name: postgresql
+    url: https://groundhog2k.github.io/helm-charts/
+
+releases:
+  - name: postgresql
+    namespace: processor
+    chart: postgresql/postgres
+    version: 1.6.7
+    installed: {{ if hasKey .Values "installPostgresql" }}{{ .Values.installPostgresql | default true }}{{ else }}true{{ end }}
+    labels:
+      tier: db
+      env: dev
+    values:
+      - ../values/postgresql.yaml

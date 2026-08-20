@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# Enable or disable the Valkey release from the Helmfile values.
+installValkey: true
+
+# Keep the Valkey service name stable for application clients.
+fullnameOverride: valkey
+
+service:
+  type: ClusterIP
+  port: 6379
+
+# ACL authentication is enabled for all clients.
+auth:
+  enabled: true
+  aclUsers:
+    default:
+      permissions: "~* &* +@all"
+      password: "tazamaValkey"
+
+# Run one primary and two replicas for cache availability.
+replica:
+  enabled: true
+  replicas: 2
+  persistence:
+    size: 1Gi
+  service:
+    enabled: true
+    type: ClusterIP
+    port: 6379
+
+# Keep the primary persistent as well as the replicas.
+dataStorage:
+  enabled: true
+  requestedSize: 1Gi

@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# Load values files at the top level to make them available for templating.
+values:
+  - ./datastore/values/*.yaml
+  - ./auxiliary/values/*.yaml
+  - ./core/values/*.yaml
+
+#  - ./values/rule-901-service-values.yaml
+#  - ./values/auth-service-values.yaml
+
+# Set default Helm options for all releases.
+# These can be overridden on a per-release basis if needed.
+helmDefaults:
+  # --atomic: If set, the installation process deletes the installation on failure.
+  atomic: true
+  # --wait: If set, will wait until all Pods, PVCs, Services, and minimum number of Pods of a
+  # Deployment, StatefulSet, or ReplicaSet are in a ready state before marking the release as successful.
+  wait: true
+  # --timeout: Time in seconds to wait for any individual Kubernetes operation (like Jobs for hooks).
+  timeout: 900
+  # --cleanup-on-fail: Allow deletion of new resources created in this upgrade when the upgrade fails.
+  cleanupOnFail: true
+
+# Load infrastructure before the services that depend on it. Cross-file
+# `needs` references are not resolved between separate sub-Helmfiles.
+helmfiles:
+  - datastore/helmfile.d/*.yaml
+  - auxiliary/helmfile.d/*.yaml
+  - core/helmfile.d/*.yaml

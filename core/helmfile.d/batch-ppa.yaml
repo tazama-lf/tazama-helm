@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+
+releases:
+  - name: batch-ppa
+    namespace: processor
+    # When using OCI, the full URI must be specified in the chart field.
+    chart: oci://docker.io/tazamaorg/batch-ppa-helm
+    version: 0.1.0
+    installed: {{ if hasKey .Values "installBatchPPA" }}{{ .Values.installBatchPPA | default true }}{{ else }}true{{ end }}
+    labels:
+      tier: core
+      env: dev
+    values:
+      - ../values/batch-ppa.yaml
