@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# Enable or disable the NGINX ingress controller release from the Helmfile values.
+installNginxIngress: true
+
+controller:
+  replicaCount: 1
+  ingressClassResource:
+    name: nginx
+    enabled: true
+    default: false
+  ingressClass: nginx
+  service:
+    type: LoadBalancer
+  publishService:
+    enabled: true

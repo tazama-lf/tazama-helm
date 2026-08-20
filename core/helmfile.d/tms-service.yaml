@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+
+releases:
+  # The TMS service from your current project
+  - name: tms-service
+    namespace: processor
+    # When using OCI, the full URI must be specified in the chart field.
+    chart: oci://docker.io/tazamaorg/tms-service-helm
+    version: 0.1.0 # Pin the chart version for consistency
+    # Conditionally install this chart. The installation can be controlled by setting
+    # 'installTmsService' in the values. By default, it's set to 'true'.
+    installed: {{ if hasKey .Values "installTmsService" }}{{ .Values.installTmsService }}{{ else }}true{{ end }}
+    labels:
+      tier: core
+      env: dev
+    values:
+      - ../values/tms-service.yaml

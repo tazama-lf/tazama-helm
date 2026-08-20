@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+
+repositories:
+  - name: jetstack
+    url: https://charts.jetstack.io
+
+releases:
+  - name: cert-manager
+    namespace: cert-manager
+    chart: jetstack/cert-manager
+    version: v1.17.2
+    createNamespace: true
+    labels:
+      tier: auxiliary
+      env: dev
+    values:
+      - ../values/cert-manager.yaml
+
+    hooks:
+      - events:
+          - postsync
+        showlogs: true
+        command: kubectl
+        args:
+          - apply
+          - --filename
+          - ../manifests/clusterissuer.yaml

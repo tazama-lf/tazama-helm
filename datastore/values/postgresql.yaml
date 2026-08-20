@@ -1,0 +1,92 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# Enable or disable the PostgreSQL release from the Helmfile values.
+installPostgresql: true
+
+# Keep a stable service name for application connection strings.
+fullnameOverride: postgresql
+
+service:
+  type: ClusterIP
+  port: 5432
+
+settings:
+  superuser:
+    value: postgres
+  superuserPassword:
+    value: postgres-password
+  authMethod: scram-sha-256
+
+# Create the primary application database and user on first initialization.
+userDatabase:
+  name:
+    value: event_history
+  user:
+    value: tazama
+  password:
+    value: tazamaPassword
+
+# Add service-specific roles and databases during first initialization.
+# These scripts run only when PostgreSQL initializes an empty data directory.
+customScripts:
+  10-create-service-databases.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    psql_admin=(psql --username "$POSTGRES_USER" --dbname postgres --no-password)
+
+    create_role() {
+      local role="$1"
+      local password="$2"
+      "${psql_admin[@]}" -v ON_ERROR_STOP=1 -v role="$role" -v password="$password" <<'SQL'
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = :'role') THEN
+        EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', :'role', :'password');
+      ELSE
+        EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'role', :'password');
+      END IF;
+    END
+    $$;
+    SQL
+    }
+
+    create_database() {
+      local database="$1"
+      local owner="$2"
+      if ! "${psql_admin[@]}" -tAc "SELECT 1 FROM pg_database WHERE datname = '${database}'" | grep -q 1; then
+        "${psql_admin[@]}" -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"${database}\" OWNER \"${owner}\""
+      fi
+    }
+
+    create_role admin adminPassword
+    create_database raw_history tazama
+    create_database configuration admin
+
+    for database in event_history raw_history; do
+      psql_database=(psql --username "$POSTGUS_USER" --dbname "$database" --no-password)
+      "${psql_database[@]}" -v ON_ERROR_STOP=1 <<'SQL'
+    GRANT CONNECT ON DATABASE event_history TO admin;
+    GRANT CONNECT ON DATABASE raw_history TO admin;
+    GRANT USAGE, CREATE ON SCHEMA public TO admin;
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO admin;
+    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO admin;
+    ALTER DEFAULT PRIVILEGES FOR ROLE tazama IN SCHEMA public
+      GRANT ALL PRIVILEGES ON TABLES TO admin;
+    ALTER DEFAULT PRIVILEGES FOR ROLE tazama IN SCHEMA public
+      GRANT ALL PRIVILEGES ON SEQUENCES TO admin;
+    SQL
+    done
+
+storage:
+  requestedSize: 1Gi
+  accessModes:
+    - ReadWriteOnce
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
