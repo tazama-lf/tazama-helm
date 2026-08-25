@@ -1,0 +1,40 @@
+# Opinionated overlay for the full DockerHub deployment path from the batch launchers.
+
+global:
+  tazamaVersion: "rc"
+  env:
+    TAZAMA_VERSION: "rc"
+
+core:
+  enabled: true
+  auth:
+    enabled: true
+  relay:
+    enabled: false
+  ui:
+    enabled: false
+  basicLogs:
+    enabled: false
+  elasticLogs:
+    enabled: false
+  natsUtilities:
+    enabled: false
+  batchPpa:
+    enabled: false
+  pgadmin:
+    enabled: true
+  hasura:
+    enabled: true
+  rules:
+    fullEnabled: true
+
+extensionsApis:
+  enabled: true
+
+extensions:
+  enabled: true
+  pgadmin:
+    enabled: false
+
+biar:
+  enabled: true

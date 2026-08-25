@@ -1,0 +1,648 @@
+{{- if .Values.extensionsApis.enabled }}
+{{ $tcsFrontendUrl := include "tazama.publicUrlForService" (dict "root" . "service" "extensions-tcs-frontend") }}
+{{- range $item := list
+    (list "extensions-api-deapi" $.Values.extensionsApis.images.deapi "extensions-apis-env-deapi" $.Values.extensionsApis.services.deapi.port)
+    (list "extensions-api-dems" $.Values.extensionsApis.images.dems "extensions-apis-env-dems" $.Values.extensionsApis.services.dems.port)
+}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tazama.componentname" (dict "root" $ "name" (index $item 0)) }}
+  namespace: {{ include "tazama.namespace" $ }}
+  labels:
+    {{- include "tazama.labels" $ | nindent 4 }}
+spec:
+  selector:
+    {{- include "tazama.selectorLabels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ index $item 0 }}
+  ports:
+    - name: http
+      port: {{ index $item 3 }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tazama.componentname" (dict "root" $ "name" (index $item 0)) }}
+  namespace: {{ include "tazama.namespace" $ }}
+  labels:
+    {{- include "tazama.labels" $ | nindent 4 }}
+spec:
+  replicas: {{ $.Values.extensionsApis.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ index $item 0 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ index $item 0 }}
+    spec:
+      {{- include "tazama.podSpec" $ | nindent 6 }}
+      containers:
+        - name: {{ index $item 0 }}
+          image: {{ include "tazama.image" (dict "root" $ "repository" (index $item 1).repository "tag" (index $item 1).tag) }}
+          imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
+          {{- include "tazama.containerSecurityContext" $ | nindent 10 }}
+          {{- include "tazama.envFrom" (dict "root" $ "component" (index $item 2)) | nindent 10 }}
+          env:
+            - name: DB_HOST
+              value: {{ include "tazama.core.postgresHost" $ }}
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" $ }}
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" $ }}
+                  key: POSTGRES_PASSWORD
+            - name: CONFIGURATION_DATABASE_URL
+              value: {{ printf "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@%s:5432/configuration" (include "tazama.core.postgresHost" $) | quote }}
+            - name: DYNAMIC_HISTORY_DB_HOST
+              value: {{ include "tazama.core.postgresHost" $ }}
+            - name: EVENT_HISTORY_DB_HOST
+              value: {{ include "tazama.core.postgresHost" $ }}
+            - name: REDIS_HOST
+              value: {{ include "tazama.core.valkeyHost" $ }}
+            - name: SERVER_URL
+              value: {{ printf "nats://%s:%v" (include "tazama.core.natsHost" $) $.Values.core.nats.service.clientPort | quote }}
+            - name: CORS_ORIGINS
+              value: {{ $tcsFrontendUrl | quote }}
+            - name: TAZAMA_AUTH_URL
+              value: {{ printf "http://%s:3020/v1/auth" (include "tazama.componentname" (dict "root" $ "name" "core-auth")) | quote }}
+            - name: AUTH_PUBLIC_KEY_PATH
+              value: /auth/test-public-key.pem
+            - name: CERT_PATH_PUBLIC
+              value: /auth/test-public-key.pem
+          ports:
+            - name: http
+              containerPort: {{ index $item 3 }}
+          volumeMounts:
+            - name: auth-keys
+              mountPath: /auth
+              readOnly: true
+          resources:
+            {{- toYaml $.Values.extensionsApis.resources | nindent 12 }}
+      volumes:
+        - name: auth-keys
+          secret:
+            secretName: {{ $.Values.extensions.authPublicKeySecretName }}
+---
+{{- end }}
+{{- end }}
+{{- if .Values.extensions.enabled }}
+{{ $tcsApiUrl := $.Values.extensions.urls.tcsApiUrl | default (include "tazama.publicUrlForService" (dict "root" $ "service" "extensions-tcs-backend")) }}
+{{ $trsApiUrl := $.Values.extensions.urls.trsApiUrl | default (include "tazama.publicUrlForService" (dict "root" $ "service" "extensions-trs-backend")) }}
+{{ $cmsApiUrl := $.Values.extensions.urls.cmsApiUrl | default (include "tazama.publicUrlForService" (dict "root" $ "service" "extensions-cms-backend")) }}
+{{ $adminEndpoint := $.Values.extensions.urls.adminEndpoint | default (include "tazama.publicUrlForService" (dict "root" $ "service" "core-admin")) }}
+{{ $authUrl := $.Values.extensions.urls.authUrl | default (include "tazama.publicUrlForService" (dict "root" $ "service" "core-auth" "path" "/v1/auth")) }}
+{{ $keycloakUrl := $.Values.extensions.urls.keycloakUrl | default (include "tazama.publicUrlForService" (dict "root" $ "service" "core-keycloak")) }}
+{{ $internalAdminUrl := printf "http://%s:%v" (include "tazama.componentname" (dict "root" $ "name" "core-admin")) $.Values.core.services.admin.servicePort }}
+{{ $internalAuthUrl := printf "http://%s:3020/v1/auth" (include "tazama.componentname" (dict "root" $ "name" "core-auth")) }}
+{{ $internalKeycloakUrl := printf "http://%s:8080" (include "tazama.componentname" (dict "root" $ "name" "core-keycloak")) }}
+{{ $internalNatsUrl := printf "nats://%s:%v" (include "tazama.core.natsHost" $) $.Values.core.nats.service.clientPort }}
+{{ $internalCorePostgresHost := include "tazama.core.postgresHost" $ }}
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "extensions-postgres") | nindent 2 }}
+spec:
+  selector:
+    {{- include "tazama.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: extensions-postgres
+  ports:
+    - name: postgres
+      port: {{ .Values.extensions.postgres.service.port }}
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "extensions-postgres") | nindent 2 }}
+spec:
+  serviceName: {{ include "tazama.extensions.postgresHost" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: extensions-postgres
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: extensions-postgres
+    spec:
+      {{- include "tazama.podSpec" . | nindent 6 }}
+      containers:
+        - name: postgres
+          image: {{ include "tazama.image" (dict "root" . "repository" .Values.extensions.postgres.image.repository "tag" .Values.extensions.postgres.image.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: EXTENSIONS_POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: EXTENSIONS_POSTGRES_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          {{- toYaml .Values.extensions.postgres.persistence.accessModes | nindent 10 }}
+        {{- $storageClass := .Values.extensions.postgres.persistence.storageClass | default .Values.global.storageClass }}
+        {{- if $storageClass }}
+        storageClassName: {{ $storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.extensions.postgres.persistence.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "extensions-sftp") | nindent 2 }}
+spec:
+  selector:
+    {{- include "tazama.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: extensions-sftp
+  ports:
+    - name: sftp
+      port: {{ .Values.extensions.sftp.service.port }}
+      targetPort: sftp
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "extensions-sftp") | nindent 2 }}
+spec:
+  serviceName: {{ include "tazama.extensions.sftpHost" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: extensions-sftp
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: extensions-sftp
+    spec:
+      {{- include "tazama.podSpec" . | nindent 6 }}
+      containers:
+        - name: sftp
+          image: {{ include "tazama.image" (dict "root" . "repository" .Values.extensions.sftp.image.repository "tag" .Values.extensions.sftp.image.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: sftp
+              containerPort: 22
+          args: ["{{ .Values.extensions.sftp.user }}:{{ .Values.extensions.sftp.password }}:{{ .Values.extensions.sftp.uid }}"]
+          volumeMounts:
+            - name: data
+              mountPath: /home/user/upload
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          {{- toYaml .Values.extensions.sftp.persistence.accessModes | nindent 10 }}
+        {{- $storageClass := .Values.extensions.sftp.persistence.storageClass | default .Values.global.storageClass }}
+        {{- if $storageClass }}
+        storageClassName: {{ $storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.extensions.sftp.persistence.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "extensions-couchdb") | nindent 2 }}
+spec:
+  selector:
+    {{- include "tazama.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: extensions-couchdb
+  ports:
+    - name: http
+      port: {{ .Values.extensions.couchdb.service.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "extensions-couchdb") | nindent 2 }}
+spec:
+  serviceName: {{ include "tazama.extensions.couchdbHost" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: extensions-couchdb
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: extensions-couchdb
+    spec:
+      {{- include "tazama.podSpec" . | nindent 6 }}
+      containers:
+        - name: couchdb
+          image: {{ include "tazama.image" (dict "root" . "repository" .Values.extensions.couchdb.image.repository "tag" .Values.extensions.couchdb.image.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            - name: COUCHDB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: COUCHDB_USER
+            - name: COUCHDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: COUCHDB_PASSWORD
+          ports:
+            - name: http
+              containerPort: 5984
+          volumeMounts:
+            - name: data
+              mountPath: /opt/couchdb/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          {{- toYaml .Values.extensions.couchdb.persistence.accessModes | nindent 10 }}
+        {{- $storageClass := .Values.extensions.couchdb.persistence.storageClass | default .Values.global.storageClass }}
+        {{- if $storageClass }}
+        storageClassName: {{ $storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.extensions.couchdb.persistence.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "extensions-flowable") | nindent 2 }}
+spec:
+  selector:
+    {{- include "tazama.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: extensions-flowable
+  ports:
+    - name: http
+      port: {{ .Values.extensions.flowable.service.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "extensions-flowable") | nindent 2 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: extensions-flowable
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: extensions-flowable
+    spec:
+      {{- include "tazama.podSpec" . | nindent 6 }}
+      containers:
+        - name: flowable
+          image: {{ include "tazama.image" (dict "root" . "repository" .Values.extensions.flowable.image.repository "tag" .Values.extensions.flowable.image.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "extensions-opensearch") | nindent 2 }}
+spec:
+  selector:
+    {{- include "tazama.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: extensions-opensearch
+  ports:
+    - name: http
+      port: {{ .Values.extensions.opensearch.service.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "extensions-opensearch") | nindent 2 }}
+spec:
+  serviceName: {{ include "tazama.extensions.opensearchHost" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: extensions-opensearch
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: extensions-opensearch
+    spec:
+      {{- include "tazama.podSpec" . | nindent 6 }}
+      containers:
+        - name: opensearch
+          image: {{ include "tazama.image" (dict "root" . "repository" .Values.extensions.opensearch.image.repository "tag" .Values.extensions.opensearch.image.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            - name: cluster.name
+              value: opensearch-cluster
+            - name: node.name
+              value: opensearch-node1
+            - name: discovery.type
+              value: single-node
+            - name: bootstrap.memory_lock
+              value: "true"
+            - name: OPENSEARCH_JAVA_OPTS
+              value: -Xms512m -Xmx512m
+            - name: DISABLE_SECURITY_PLUGIN
+              value: "true"
+          ports:
+            - name: http
+              containerPort: 9200
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/opensearch/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          {{- toYaml .Values.extensions.opensearch.persistence.accessModes | nindent 10 }}
+        {{- $storageClass := .Values.extensions.opensearch.persistence.storageClass | default .Values.global.storageClass }}
+        {{- if $storageClass }}
+        storageClassName: {{ $storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.extensions.opensearch.persistence.size }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "extensions-cms-migrate") | nindent 2 }}
+spec:
+  backoffLimit: {{ .Values.jobs.cmsMigrate.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: extensions-cms-migrate
+    spec:
+      restartPolicy: Never
+      {{- include "tazama.podSpec" . | nindent 6 }}
+      containers:
+        - name: migrate
+          image: {{ include "tazama.image" (dict "root" . "repository" .Values.extensions.images.cmsMigrate.repository "tag" .Values.extensions.images.cmsMigrate.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command: ["sh", "/home/app/migrate.sh"]
+          env:
+            - name: POSTGRES_HOST
+              value: {{ include "tazama.extensions.postgresHost" . }}
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: EXTENSIONS_POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: EXTENSIONS_POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: {{ printf "postgresql://%s:%s@%s:5432/tazama_cms" .Values.secrets.extensionsPostgres.username .Values.secrets.extensionsPostgres.password (include "tazama.extensions.postgresHost" .) | quote }}
+            - name: DWH_DATABASE_URL
+              value: {{ printf "postgresql://%s:%s@%s:5432/tazama_dwh" .Values.secrets.extensionsPostgres.username .Values.secrets.extensionsPostgres.password (include "tazama.extensions.postgresHost" .) | quote }}
+            - name: EXTENSIONS_POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: EXTENSIONS_POSTGRES_USER
+            - name: EXTENSIONS_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: EXTENSIONS_POSTGRES_PASSWORD
+{{- range $item := list
+    (list "extensions-tcs-backend" "extensions-tcs-backend" $.Values.extensions.images.tcsBackend "extensions-env-tcs" $.Values.extensions.services.tcsBackend.port)
+    (list "extensions-tcs-frontend" "extensions-tcs-frontend" $.Values.extensions.images.tcsFrontend "extensions-env-tcs" $.Values.extensions.services.tcsFrontend.port)
+    (list "extensions-trs-backend" "extensions-trs-backend" $.Values.extensions.images.trsBackend "extensions-env-trs" $.Values.extensions.services.trsBackend.port)
+    (list "extensions-trs-frontend" "extensions-trs-frontend" $.Values.extensions.images.trsFrontend "extensions-env-trs" $.Values.extensions.services.trsFrontend.port)
+    (list "extensions-cms-backend" "extensions-cms-backend" $.Values.extensions.images.cmsBackend "extensions-env-cms" $.Values.extensions.services.cmsBackend.port)
+    (list "extensions-cms-frontend" "extensions-cms-frontend" $.Values.extensions.images.cmsFrontend "extensions-env-cms" $.Values.extensions.services.cmsFrontend.port)
+}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tazama.componentname" (dict "root" $ "name" (index $item 0)) }}
+  namespace: {{ include "tazama.namespace" $ }}
+  labels:
+    {{- include "tazama.labels" $ | nindent 4 }}
+spec:
+  selector:
+    {{- include "tazama.selectorLabels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ index $item 1 }}
+  ports:
+    - name: http
+      port: {{ index $item 4 }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tazama.componentname" (dict "root" $ "name" (index $item 0)) }}
+  namespace: {{ include "tazama.namespace" $ }}
+  labels:
+    {{- include "tazama.labels" $ | nindent 4 }}
+spec:
+  replicas: {{ $.Values.extensions.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ index $item 1 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ index $item 1 }}
+    spec:
+      {{- include "tazama.podSpec" $ | nindent 6 }}
+      containers:
+        - name: {{ index $item 1 }}
+          image: {{ include "tazama.image" (dict "root" $ "repository" (index $item 2).repository "tag" (index $item 2).tag) }}
+          imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
+          {{- include "tazama.envFrom" (dict "root" $ "component" (index $item 3)) | nindent 10 }}
+          env:
+            - name: SERVER_A_HOST
+              value: {{ include "tazama.componentname" (dict "root" $ "name" "core-tms") }}
+            - name: SERVER_B_HOST
+              value: {{ include "tazama.componentname" (dict "root" $ "name" "extensions-cms-frontend") }}
+            - name: POSTGRES_HOST
+              value: {{ include "tazama.extensions.postgresHost" $ }}
+            - name: DATABASE_URL
+              value: {{ printf "postgresql://%s:%s@%s:5432/tazama_cms" $.Values.secrets.extensionsPostgres.username $.Values.secrets.extensionsPostgres.password (include "tazama.extensions.postgresHost" $) | quote }}
+            - name: DWH_DATABASE_URL
+              value: {{ printf "postgresql://%s:%s@%s:5432/tazama_dwh" $.Values.secrets.extensionsPostgres.username $.Values.secrets.extensionsPostgres.password (include "tazama.extensions.postgresHost" $) | quote }}
+            - name: EXTENSIONS_POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" $ }}
+                  key: EXTENSIONS_POSTGRES_USER
+            - name: EXTENSIONS_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" $ }}
+                  key: EXTENSIONS_POSTGRES_PASSWORD
+            - name: SERVER_URL
+              value: {{ printf "nats://%s:%v" (include "tazama.core.natsHost" $) $.Values.core.nats.service.clientPort | quote }}
+            - name: OPENSEARCH_NODE
+              value: {{ printf "http://%s:9200" (include "tazama.extensions.opensearchHost" $) | quote }}
+            - name: SFTP_HOST_CONSUMER
+              value: {{ include "tazama.extensions.sftpHost" $ }}
+            - name: SFTP_HOST_PRODUCER
+              value: {{ include "tazama.extensions.sftpHost" $ }}
+            - name: FLOWABLE_URL
+              value: {{ printf "http://%s:8080/flowable-rest" (include "tazama.extensions.flowableHost" $) | quote }}
+            - name: COUCHDB_URL
+              value: {{ printf "http://%s:5984" (include "tazama.extensions.couchdbHost" $) | quote }}
+            - name: REDIS_HOST
+              value: {{ include "tazama.core.valkeyHost" $ }}
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              value: redis-password
+            - name: TAZAMA_AUTH_URL
+              value: {{ $internalAuthUrl | quote }}
+            - name: AUTH_PUBLIC_KEY_PATH
+              value: /auth/test-public-key.pem
+            - name: CERT_PATH_PUBLIC
+              value: /auth/test-public-key.pem
+            {{- if eq (index $item 0) "extensions-tcs-backend" }}
+            - name: POSTGRES_HOST
+              value: {{ $internalCorePostgresHost | quote }}
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: CONFIGURATION_DATABASE_URL
+              value: {{ printf "postgresql://%s:%s@%s:5432/configuration" $.Values.secrets.postgres.username $.Values.secrets.postgres.password $internalCorePostgresHost | quote }}
+            - name: SERVER_URL
+              value: {{ $internalNatsUrl | quote }}
+            - name: ADMIN_SERVICE_URL
+              value: {{ $internalAdminUrl | quote }}
+            - name: AUTH_URL
+              value: {{ $internalKeycloakUrl | quote }}
+            - name: TAZAMA_AUTH_ADMIN_USERNAME
+              value: {{ $.Values.extensions.env.tcs.TAZAMA_AUTH_ADMIN_USERNAME | quote }}
+            - name: TAZAMA_AUTH_ADMIN_PASSWORD
+              value: {{ $.Values.extensions.env.tcs.TAZAMA_AUTH_ADMIN_PASSWORD | quote }}
+            {{- end }}
+            {{- if eq (index $item 0) "extensions-trs-backend" }}
+            - name: ADMIN_SERVICE_URL
+              value: {{ $internalAdminUrl | quote }}
+            - name: AUTH_URL
+              value: {{ $internalKeycloakUrl | quote }}
+            - name: TAZAMA_AUTH_ADMIN_USERNAME
+              value: {{ $.Values.extensions.env.trs.TAZAMA_AUTH_ADMIN_USERNAME | default $.Values.extensions.env.tcs.TAZAMA_AUTH_ADMIN_USERNAME | quote }}
+            - name: TAZAMA_AUTH_ADMIN_PASSWORD
+              value: {{ $.Values.extensions.env.trs.TAZAMA_AUTH_ADMIN_PASSWORD | default $.Values.extensions.env.tcs.TAZAMA_AUTH_ADMIN_PASSWORD | quote }}
+            {{- end }}
+            {{- if eq (index $item 0) "extensions-cms-backend" }}
+            - name: SERVER_URL
+              value: {{ $internalNatsUrl | quote }}
+            - name: REDIS_HOST
+              value: {{ include "tazama.core.valkeyHost" $ | quote }}
+            - name: TAZAMA_AUTH_URL
+              value: {{ $internalAuthUrl | quote }}
+            {{- end }}
+            {{- if eq (index $item 0) "extensions-tcs-backend" }}
+            - name: CORS_ORIGINS
+              value: {{ (printf "http://%s" (include "tazama.ingressHostForService" (dict "root" $ "service" "extensions-tcs-frontend"))) | quote }}
+            {{- end }}
+            {{- if eq (index $item 0) "extensions-trs-backend" }}
+            - name: ALLOWED_ORIGINS
+              value: {{ (printf "http://%s" (include "tazama.ingressHostForService" (dict "root" $ "service" "extensions-trs-frontend"))) | quote }}
+            {{- end }}
+            {{- if or (eq (index $item 0) "extensions-tcs-frontend") (eq (index $item 0) "extensions-trs-frontend") (eq (index $item 0) "extensions-cms-frontend") }}
+            - name: TCS_API_URL
+              value: {{ $tcsApiUrl | quote }}
+            - name: TRS_API_URL
+              value: {{ $trsApiUrl | quote }}
+            - name: CMS_API_URL
+              value: {{ $cmsApiUrl | quote }}
+            - name: ADMIN_ENDPOINT
+              value: {{ $adminEndpoint | quote }}
+            - name: TAZAMA_AUTH_URL
+              value: {{ $authUrl | quote }}
+            - name: AUTH_URL
+              value: {{ $keycloakUrl | quote }}
+            - name: VITE_TCS_API_URL
+              value: {{ $tcsApiUrl | quote }}
+            - name: VITE_TRS_API_URL
+              value: {{ $trsApiUrl | quote }}
+            - name: VITE_CMS_API_URL
+              value: {{ $cmsApiUrl | quote }}
+            {{- if eq (index $item 0) "extensions-tcs-frontend" }}
+            - name: VITE_API_URL
+              value: {{ $tcsApiUrl | quote }}
+            - name: VITE_API_BASE_URL
+              value: {{ $tcsApiUrl | quote }}
+            {{- end }}
+            {{- if eq (index $item 0) "extensions-trs-frontend" }}
+            - name: VITE_API_URL
+              value: {{ $trsApiUrl | quote }}
+            {{- end }}
+            {{- if eq (index $item 0) "extensions-cms-frontend" }}
+            - name: VITE_API_URL
+              value: {{ $cmsApiUrl | quote }}
+            - name: VITE_API_BASE_URL
+              value: {{ $cmsApiUrl | quote }}
+            {{- end }}
+            - name: VITE_ADMIN_ENDPOINT
+              value: {{ $adminEndpoint | quote }}
+            - name: VITE_TAZAMA_AUTH_URL
+              value: {{ $authUrl | quote }}
+            - name: VITE_AUTH_URL
+              value: {{ $keycloakUrl | quote }}
+            - name: __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS
+              value: {{ printf ".%s" $.Values.ingress.domain | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ index $item 4 }}
+          volumeMounts:
+            - name: auth-keys
+              mountPath: /auth
+              readOnly: true
+      volumes:
+        - name: auth-keys
+          secret:
+            secretName: {{ $.Values.extensions.authPublicKeySecretName }}
+---
+{{- end }}
+{{- end }}

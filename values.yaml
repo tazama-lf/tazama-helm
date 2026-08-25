@@ -1,0 +1,926 @@
+# Default values for the Tazama umbrella chart.
+# These defaults target a Kubernetes-friendly translation of the Docker Compose
+# deployment in branch: tazama/feat/mono-repo-phased-deployment
+
+nameOverride: ""
+fullnameOverride: ""
+namespaceOverride: ""
+imagePullSecrets: []
+commonLabels: {}
+commonAnnotations: {}
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+scheduling:
+  workerOnly: false
+  nodeSelector: {}
+  tolerations: []
+
+networkPolicy:
+  enabled: false
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations: {}
+  domain: "frmk8s-cluster.sybrin.co.za"
+  scheme: "https"
+  tlsSecretName: "tlscomsecret"
+  hosts:
+    - subdomain: keycloak
+      service: core-keycloak
+      port: 8080
+      path: /
+      pathType: Prefix
+    - subdomain: admin
+      service: core-admin
+      port: 5100
+      path: /
+      pathType: Prefix
+    - subdomain: auth
+      service: core-auth
+      port: 3020
+      path: /
+      pathType: Prefix
+    - subdomain: tms
+      service: core-tms
+      port: 3000
+      path: /
+      pathType: Prefix
+    - subdomain: tcs
+      service: extensions-tcs-frontend
+      port: 5173
+      path: /
+      pathType: Prefix
+    - subdomain: tcs-api
+      service: core-admin
+      port: 5100
+      path: /
+      pathType: Prefix
+    - subdomain: auth
+      service: core-auth
+      port: 3020
+      path: /
+      pathType: Prefix
+    - subdomain: tms
+      service: core-tms
+      port: 3000
+      path: /
+      pathType: Prefix
+    - subdomain: tcs
+      service: extensions-tcs-backend
+      port: 3010
+      path: /
+      pathType: Prefix
+    - subdomain: trs
+      service: extensions-trs-frontend
+      port: 5174
+      path: /
+      pathType: Prefix
+    - subdomain: trs-api
+      service: extensions-trs-backend
+      port: 3005
+      path: /
+      pathType: Prefix
+    - subdomain: cms
+      service: extensions-cms-frontend
+      port: 5175
+      path: /
+      pathType: Prefix
+    - subdomain: cms-api
+      service: extensions-cms-backend
+      port: 3090
+      path: /
+      pathType: Prefix
+    - subdomain: demo
+      service: extensions-trs-frontend
+      port: 5174
+      path: /
+      pathType: Prefix
+    - subdomain: nifi
+      service: biar-nifi
+      port: 8080
+      path: /
+      pathType: Prefix
+    - subdomain: recon
+      service: biar-recon
+      port: 9888
+      path: /
+      pathType: Prefix
+    - subdomain: solr
+      service: biar-solr
+      port: 8983
+      path: /
+      pathType: Prefix
+  tls: []
+
+global:
+  tazamaVersion: "rc"
+  imageRegistry: ""
+  imagePullPolicy: Always
+  startupChecks:
+    enabled: true
+    postgresImage: postgres:16
+    busyboxImage: busybox:1.36
+    schemaDatabase: raw_history
+    schemaTable: pain013
+  serverAHost: "tazama-core"
+  serverBHost: "tazama-extensions"
+  storageClass: ""
+  timezone: "UTC"
+  env:
+    TAZAMA_VERSION: "rc"
+    SERVER_A_HOST: "tazama-core"
+    SERVER_B_HOST: "tazama-extensions"
+    ADMIN_PORT: "5100"
+    TMS_PORT: "5000"
+    DEAPI_URL: "tazama-extensions-tcs-backend"
+    DEAPI_PORT: "3001"
+    DEMS_URL: "tazama-extensions-api-dems"
+    DEMS_PORT: "3002"
+    TCS_PORT: "3010"
+    TCS_FRONTEND_PORT: "5173"
+    TRS_BACKEND_PORT: "3005"
+    TRS_FRONTEND_PORT: "5174"
+    CMS_BACKEND_PORT: "3090"
+    CMS_FRONTEND_PORT: "5175"
+    POSTGRESQL_CMS_PORT: "15433"
+    SFTP_PORT: "12222"
+    COUCHDB_PORT: "5984"
+    FLOWABLE_PORT: "8081"
+    OPENSEARCH_PORT: "9200"
+    TIKA_PORT: "9998"
+    SOLR_PORT: "8983"
+    NIFI_PORT: "8088"
+
+secrets:
+  postgres:
+    username: "<set-at-deploy-time>"
+    password: "<set-at-deploy-time>"
+  extensionsPostgres:
+    username: "<set-at-deploy-time>"
+    password: "<set-at-deploy-time>"
+  couchdb:
+    username: "<set-at-deploy-time>"
+    password: "<set-at-deploy-time>"
+  flowable:
+    username: "<set-at-deploy-time>"
+    password: "<set-at-deploy-time>"
+  nifi:
+    username: "<set-at-deploy-time>"
+    password: "<set-at-deploy-time>"
+  keycloak:
+    adminUser: "<set-at-deploy-time>"
+    adminPassword: "<set-at-deploy-time>"
+  hasura:
+    adminSecret: "<set-at-deploy-time>"
+  auth:
+    publicKey: |
+      -----BEGIN PUBLIC KEY-----
+      MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAv1/9TBzesAftcmrn08FL
+      nVxesa4uvW0bvxbXJkx/7X0WMRxMdNwQI1Z96MszNj78akRFQHn4yrfF3V2eJ5xx
+      HYmtCTW/VIF/8JeaaH3vvMwLobc7uy67TTeRN56ynm7C/tNSeXP4UXTwhvwKyysX
+      jn04vP9fq+8lpttujyJqUoUIITbVv2gMmMEpdCyUGq5prmEADMqA7DWTT5VC3M1M
+      ku6HqNTtON52cO+zDn8XI8k7wKFRxotT/qcpDvIVVQI6xTjip+IJrMYd6gAz8i7I
+      snXeLjPoagVfcENmxnth9bcbhSKBaXvA81hH/IX2lWJHLXWTQ56yv4zYAY8zxWpp
+      BQIDAQAB
+      -----END PUBLIC KEY-----
+    privateKey: |
+      -----BEGIN RSA PRIVATE KEY-----
+      MIIEpAIBAAKCAQEAv1/9TBzesAftcmrn08FLnVxesa4uvW0bvxbXJkx/7X0WMRxM
+      dNwQI1Z96MszNj78akRFQHn4yrfF3V2eJ5xxHYmtCTW/VIF/8JeaaH3vvMwLobc7
+      uy67TTeRN56ynm7C/tNSeXP4UXTwhvwKyysXjn04vP9fq+8lpttujyJqUoUIITbV
+      v2gMmMEpdCyUGq5prmEADMqA7DWTT5VC3M1Mku6HqNTtON52cO+zDn8XI8k7wKFR
+      xotT/qcpDvIVVQI6xTjip+IJrMYd6gAz8i7IsnXeLjPoagVfcENmxnth9bcbhSKB
+      aXvA81hH/IX2lWJHLXWTQ56yv4zYAY8zxWppBQIDAQABAoIBACGIFR6v9EjNqsog
+      dyxAMxqIY8MoLOJd6r2pp9r7DnMzNp82QSM8p8s5TWhrqjZ4BMwt2CB6/p+uYYnu
+      7FYucBdn1xzFARgydJNYTOLAJjBjZCpaq6mZf5IBCX3AXbWq3Jm/tzS2oCzNm5Nb
+      OBzvGPqLcFSVPlMm3OcGjbGgqxZ4ESdgJf4zS4eXAlw74DGh59u99xl73ltY1nkN
+      IxOeB7VL+by2H2A0WbK45UIiuycZw/E6uNXB0B/siCNZWt8IpWtZrI3q/PWYES0S
+      8cVJK4BVxKwNsfwdQ+QroTkSkNmCM0mlTuCzSIfnH3DZOUCMXleNc3SngMiN0PcN
+      /Tppg4UCgYEA2TwuWvWNgLU9T1WMhEVwg8IG/kh8vTdrz0vEVm0hYdLUthqVOH3D
+      Hy4vcJ+/RWKqvpBe2FjpcszWZplfgZuOda9msyk8uGWuMtHVUtwadYJ7l762EQwA
+      eZ0vmvSmmo1l2MSPWtxIdZzFxUnH1f7u8eZc0NeGmsakfgPow8t9mQsCgYEA4YZ0
+      uvE9jzDXHt5NYwWvHhbY+Uj/UOkVyqkzTapB4Vt+8U8dqU8k1xeIR7cuorIjtG7H
+      burMN+D8V7gWGw/DK51X1tGn6AP9CYACa16lqcPvjTjuLdOz4cHgjmJvAmUx9vqd
+      WXhw9C/9SlFZM25aNd4TOvwirGc/qjT2T1RD8C8CgYEAycq7jMb40QyKjT18sAoJ
+      AHumH2Oaa/IldYR+N4JcNhCwgxCieL1qGXa/nrDl7kA/N5HIaNP+1yMsLlZef3jO
+      lsd+cQLnYqshbBe7P6Mx+OJiiI0hdyhc8Jtw81I7yOl8KCY+vDpQHOCqXh+xQDn2
+      IELLCTyLzw6jEmPzPp2yaA0CgYABHzAZdfW+bpnDV4u/AFo8phRyOQC8IEyxc2ID
+      8uLdAh2Bick1/GTMhRtyb+DVgllXHm3ziUt2w7G9pfbGL6/i2aeENArHxq1NjMt2
+      SUQ9sfHRHAVjSPhOGS7KxoaS1noHJnv94/F75Xk3E2yEKvpb5jzmQDbT8LeKWzUW
+      c+7alQKBgQCnOQedXTLJjGEu53LXYKQcvF0nHai0XYZHiItSAkjzhNzjR1X+VAbk
+      80Y9ekh3N+RCc+4MSZ7JWRLrWy24Ct2+d9NYH0hM+Sgdg2yV7/UOMf36EnZr+t2n
+      AemBzp+Pb3lr1xZnGjpjqERajSQi9/+dMj80pXq96xFpDywzpABpyA==
+      -----END RSA PRIVATE KEY-----
+
+core:
+  enabled: true
+  replicaCount: 1
+  auth:
+    enabled: true
+  keycloak:
+    persistence:
+      enabled: true
+      accessModes: ["ReadWriteOnce"]
+      size: 1Gi
+      storageClass: ""
+  relay:
+    enabled: false
+  ui:
+    enabled: false
+  basicLogs:
+    enabled: false
+  elasticLogs:
+    enabled: false
+  natsUtilities:
+    enabled: false
+  batchPpa:
+    enabled: false
+  pgadmin:
+    enabled: false
+  hasura:
+    enabled: false
+  rules:
+    fullEnabled: true
+    # Extracted from docker-compose.full.rules.yaml by inspection of the branch.
+    # Additional rules may be present; extend here as you bring over the full templates.
+    enabledRules:
+      - "001"
+      - "002"
+      - "003"
+      - "004"
+      - "006"
+      - "007"
+      - "008"
+      - "010"
+      - "011"
+      - "016"
+      - "017"
+      - "018"
+      - "020"
+      - "021"
+      - "024"
+      - "025"
+      - "026"
+      - "027"
+      - "028"
+      - "030"
+      - "044"
+      - "045"
+      - "048"
+      - "054"
+      - "063"
+      - "074"
+      - "075"
+      - "076"
+      - "078"
+      - "083"
+      - "084"
+      - "090"
+      - "091"
+  postgres:
+    enabled: true
+    image:
+      repository: postgres
+      tag: "18"
+    service:
+      port: 5432
+      type: ClusterIP
+    persistence:
+      enabled: true
+      accessModes: ["ReadWriteOnce"]
+      size: 20Gi
+      storageClass: ""
+    resources: {}
+    tuning:
+      maxConnections: "1000"
+      sharedBuffers: "512MB"
+      effectiveCacheSize: "2GB"
+    databases:
+      evaluation: evaluation
+      configuration: configuration
+      eventHistory: event_history
+      rawHistory: raw_history
+    bootstrap:
+      enabled: true
+      # The compose file mounts 03-full-dockerhub.sql into the initdb directory.
+      # Replace these placeholders with the actual SQL contents or external files.
+      configMapName: ""
+      fullDockerhubSql: ""
+  nats:
+    enabled: true
+    image:
+      repository: nats
+      tag: "2"
+    service:
+      clientPort: 4222
+      clusterPort: 6222
+      monitorPort: 8222
+      type: ClusterIP
+    resources: {}
+  valkey:
+    enabled: true
+    image:
+      repository: valkey/valkey
+      tag: "7.2.5"
+    service:
+      port: 6379
+      type: ClusterIP
+    resources: {}
+  images:
+    adminService:
+      repository: tazamaorg/admin-service
+      tag: ""
+    tms:
+      repository: tazamaorg/tms-service
+      tag: ""
+    eventDirector:
+      repository: tazamaorg/event-director
+      tag: ""
+    typologyProcessor:
+      repository: tazamaorg/typology-processor
+      tag: ""
+    tadp:
+      repository: tazamaorg/transaction-aggregation-decisioning-processor
+      tag: ""
+    eventFlow:
+      repository: tazamaorg/event-flow
+      tag: ""
+  services:
+    admin:
+      port: 3100
+      servicePort: 5100
+    tms:
+      port: 3000
+      servicePort: 3000
+    eventDirector:
+      port: 3000
+    typologyProcessor:
+      port: 3000
+    tadp:
+      port: 3000
+    eventFlow:
+      port: 3000
+  env:
+    admin:
+      FUNCTION_NAME: admin-service
+      MAX_CPU: "1"
+      NODE_ENV: dev
+      ACTIVE_CONDITIONS_ONLY: "false"
+      PORT: "3100"
+      APM_SERVICE_NAME: admin-service
+      APM_URL: http://apm:8200
+      APM_ACTIVE: "false"
+      REDIS_DATABASE: "0"
+      REDIS_SERVERS: '[{"host":"valkey", "port":6379}]'
+      REDIS_IS_CLUSTER: "false"
+      DISTRIBUTED_CACHETTL: "300"
+      DISTRIBUTED_CACHE_ENABLED: "false"
+      EVALUATION_DATABASE: evaluation
+      EVALUATION_DATABASE_HOST: postgres
+      EVALUATION_DATABASE_USER: postgres
+      CONFIGURATION_DATABASE: configuration
+      CONFIGURATION_DATABASE_HOST: postgres
+      CONFIGURATION_DATABASE_USER: postgres
+      EVENT_HISTORY_DATABASE: event_history
+      EVENT_HISTORY_DATABASE_HOST: postgres
+    tms:
+      FUNCTION_NAME: transaction-monitoring-service
+      MAX_CPU: "1"
+      PORT: "3000"
+      QUOTING: "false"
+      NODE_ENV: dev
+      APM_SERVICE_NAME: tms-service
+      APM_URL: http://apm:8200
+      APM_ACTIVE: "false"
+      REDIS_DATABASE: "0"
+      REDIS_SERVERS: '[{"host":"valkey", "port":6379}]'
+      REDIS_IS_CLUSTER: "false"
+      DISTRIBUTED_CACHETTL: "300"
+      DISTRIBUTED_CACHE_ENABLED: "false"
+      LOCAL_CACHETTL: "300"
+      LOCAL_CACHE_ENABLED: "false"
+      RAW_HISTORY_DATABASE: raw_history
+      RAW_HISTORY_DATABASE_HOST: postgres
+      RAW_HISTORY_DATABASE_USER: postgres
+      EVENT_HISTORY_DATABASE: event_history
+      EVENT_HISTORY_DATABASE_HOST: postgres
+      EVENT_HISTORY_DATABASE_USER: postgres
+      LOG_LEVEL: debug
+      STARTUP_TYPE: nats
+      SERVER_URL: nats:4222
+    eventDirector:
+      FUNCTION_NAME: event-director
+      MAX_CPU: "1"
+      PORT: "3000"
+      NODE_ENV: dev
+      APM_SERVICE_NAME: event-director
+      APM_URL: http://apm:8200
+      APM_ACTIVE: "false"
+      REDIS_DATABASE: "0"
+      REDIS_SERVERS: '[{"host":"valkey", "port":6379}]'
+      REDIS_IS_CLUSTER: "false"
+      DISTRIBUTED_CACHETTL: "300"
+      DISTRIBUTED_CACHE_ENABLED: "false"
+      LOCAL_CACHETTL: "300"
+      LOCAL_CACHE_ENABLED: "false"
+      CONFIGURATION_DATABASE: configuration
+      CONFIGURATION_DATABASE_HOST: postgres
+      CONFIGURATION_DATABASE_USER: postgres
+      LOG_LEVEL: info
+      STARTUP_TYPE: nats
+      SERVER_URL: nats:4222
+      CONSUMER_STREAM: event-director
+    typologyProcessor:
+      FUNCTION_NAME: typology-processor
+      NODE_ENV: dev
+      MAX_CPU: "1"
+      SUPPRESS_ALERTS: "true"
+      APM_SERVICE_NAME: typology-processor
+      APM_URL: http://apm:8200
+      APM_ACTIVE: "false"
+      REDIS_DATABASE: "0"
+      REDIS_SERVERS: '[{"host":"valkey", "port":6379}]'
+      REDIS_IS_CLUSTER: "false"
+      DISTRIBUTED_CACHETTL: "300"
+      DISTRIBUTED_CACHE_ENABLED: "false"
+      LOCAL_CACHETTL: "300"
+      LOCAL_CACHE_ENABLED: "false"
+      CONFIGURATION_DATABASE: configuration
+      CONFIGURATION_DATABASE_HOST: postgres
+      CONFIGURATION_DATABASE_USER: postgres
+      LOG_LEVEL: info
+      STARTUP_TYPE: nats
+      SERVER_URL: nats:4222
+      INTERDICTION_DESTINATION: global
+      INTERDICTION_PRODUCER: interdiction-service
+    tadp:
+      FUNCTION_NAME: transaction-aggregation-decisioning-processor
+      NODE_ENV: dev
+      MAX_CPU: "1"
+      SUPPRESS_ALERTS: "true"
+      APM_URL: http://apm:8200
+      APM_ACTIVE: "false"
+      APM_SERVICE_NAME: tadp
+      REDIS_DATABASE: "0"
+      REDIS_SERVERS: '[{"host":"valkey", "port":6379}]'
+      REDIS_IS_CLUSTER: "false"
+      DISTRIBUTED_CACHETTL: "300"
+      DISTRIBUTED_CACHE_ENABLED: "false"
+      LOCAL_CACHETTL: "300"
+      LOCAL_CACHE_ENABLED: "false"
+      RAW_HISTORY_DATABASE: raw_history
+      CONFIGURATION_DATABASE: configuration
+      EVALUATION_DATABASE: evaluation
+      LOG_LEVEL: info
+      STARTUP_TYPE: nats
+      SERVER_URL: nats:4222
+      ALERT_DESTINATION: global
+      ALERT_PRODUCER: investigation-service
+    eventFlow:
+      FUNCTION_NAME: event-flow-rule-processor
+      RULE_NAME: EFRuP
+      RULE_VERSION: 1.0.0
+      NODE_ENV: dev
+      MAX_CPU: "1"
+      APM_SERVICE_NAME: event-flow
+      APM_URL: http://apm:8200
+      APM_ACTIVE: "false"
+      REDIS_DATABASE: "0"
+      REDIS_SERVERS: '[{"host":"valkey", "port":6379}]'
+      REDIS_IS_CLUSTER: "false"
+      DISTRIBUTED_CACHETTL: "300"
+      DISTRIBUTED_CACHE_ENABLED: "false"
+      LOCAL_CACHETTL: "300"
+      LOCAL_CACHE_ENABLED: "false"
+      CONFIGURATION_DATABASE: configuration
+      LOG_LEVEL: info
+      STARTUP_TYPE: nats
+      SERVER_URL: nats:4222
+      SUPPRESS_ALERTS: "true"
+      INTERDICTION_DESTINATION: global
+      INTERDICTION_PRODUCER: interdiction-service
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+extensionsApis:
+  enabled: true
+  replicaCount: 1
+  images:
+    deapi:
+      repository: tazamaorg/data-enrichment-service
+      tag: ""
+    dems:
+      repository: tazamaorg/event-monitoring-service
+      tag: ""
+  services:
+    deapi:
+      port: 3001
+    dems:
+      port: 3002
+  env:
+    deapi:
+      FUNCTION_NAME: data-enrichment-service
+      NODE_ENV: dev
+      MAX_CPU: "2"
+      PORT: "3001"
+      SIZE: 200mb
+      CORS_ORIGINS: ""
+      POSTGRES_CONTAINER_NAME: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: "<set-at-deploy-time>"
+      POSTGRES_PASSWORD: "<set-at-deploy-time>"
+      POSTGRES_DB: enrichment
+      CONFIGURATION_DATABASE_URL: postgresql://postgres:unused@tazama-core-postgres:5432/enrichment
+      DB_HOST: tazama-core-postgres
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: "<set-at-deploy-time>"
+      DB_CERT_PATH: ""
+      BATCH_SIZE: "1000"
+      REDIS_CONTAINER_NAME: valkey
+      REDIS_HOST: tazama-core-valkey
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: "<set-at-deploy-time>"
+      CACHE_TTL: "7200"
+      NATS_CONTAINER_NAME: nats
+      SERVER_URL: nats://tazama-core-nats:4222
+      NATS_PORT: "4222"
+      NATS_HTTP_PORT: "8222"
+      STARTUP_TYPE: nats
+      PRODUCER_STREAM: enrichment.notification.response
+      CONSUMER_STREAM: enrichment.notification
+      STREAM_SUBJECT: enrichment.notification
+      ENCRYPTION_KEY: "<set-at-deploy-time>"
+      SALT_ROUNDS: "10"
+      APM_ACTIVE: "false"
+      APM_URL: http://localhost:8200
+      APM_SECRET_TOKEN: "<set-at-deploy-time>"
+      APM_SERVICE_NAME: data-enrichment-service
+      TAZAMA_AUTH_URL: http://tazama-core-auth:3020/v1/auth
+      AUTH_PUBLIC_KEY_PATH: /auth/test-public-key.pem
+      LOGSTASH_LEVEL: debug
+    dems:
+      FUNCTION_NAME: event-monitoring-service
+      NODE_ENV: dev
+      MAX_CPU: "1"
+      APP_PORT: "3002"
+      CORS_ORIGINS: ""
+      CONFIGURATION_DATABASE_URL: "<set-at-deploy-time>"
+      DB_HOST: tazama-core-postgres
+      DB_PORT: "5432"
+      DB_USER: "<set-at-deploy-time>"
+      DB_PASSWORD: "<set-at-deploy-time>"
+      DB_NAME: configuration
+      DYNAMIC_HISTORY_DB_HOST: tazama-core-postgres
+      DYNAMIC_HISTORY_DB_PORT: "5432"
+      DYNAMIC_HISTORY_DB_NAME: raw_history
+      DYNAMIC_HISTORY_DB_USER: "<set-at-deploy-time>"
+      DYNAMIC_HISTORY_DB_PASSWORD: "<set-at-deploy-time>"
+      DYNAMIC_HISTORY_DB_CERT_PATH: ""
+      EVENT_HISTORY_DB_HOST: tazama-core-postgres
+      EVENT_HISTORY_DB_PORT: "5432"
+      EVENT_HISTORY_DB_NAME: event_history
+      EVENT_HISTORY_DB_USER: "<set-at-deploy-time>"
+      EVENT_HISTORY_DB_PASSWORD: "<set-at-deploy-time>"
+      EVENT_HISTORY_DB_CERT_PATH: ""
+      DB_MIN_CONNECTIONS: "8"
+      DB_MAX_CONNECTIONS: "500"
+      REDIS_HOST: tazama-core-valkey
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: "<set-at-deploy-time>"
+      TTL: "3600"
+      SERVER_URL: nats://tazama-core-nats:4222
+      STARTUP_TYPE: nats
+      PRODUCER_STREAM: dems.notification.response
+      CONSUMER_STREAM: config.notification
+      TAZAMA_AUTH_URL: http://tazama-core-auth:3020/v1/auth/login
+      AUTH_PUBLIC_KEY_PATH: /auth/test-public-key.pem
+      CERT_PATH_PUBLIC: /auth/test-public-key.pem
+  resources: {}
+
+extensions:
+  enabled: true
+  replicaCount: 1
+  pgadmin:
+    enabled: false
+  postgres:
+    image:
+      repository: postgres
+      tag: "18"
+    service:
+      port: 5432
+    persistence:
+      enabled: true
+      accessModes: ["ReadWriteOnce"]
+      size: 20Gi
+      storageClass: ""
+  sftp:
+    image:
+      repository: atmoz/sftp
+      tag: latest
+    user: user
+    password: "<set-at-deploy-time>"
+    uid: 1001
+    service:
+      port: 22
+    persistence:
+      enabled: true
+      accessModes: ["ReadWriteOnce"]
+      size: 5Gi
+      storageClass: ""
+  couchdb:
+    image:
+      repository: couchdb
+      tag: "3.3"
+    service:
+      port: 5984
+    persistence:
+      enabled: true
+      accessModes: ["ReadWriteOnce"]
+      size: 10Gi
+      storageClass: ""
+  flowable:
+    image:
+      repository: flowable/flowable-rest
+      tag: latest
+    service:
+      port: 8080
+  opensearch:
+    image:
+      repository: opensearchproject/opensearch
+      tag: "2.13.0"
+    service:
+      port: 9200
+    persistence:
+      enabled: true
+      accessModes: ["ReadWriteOnce"]
+      size: 20Gi
+      storageClass: ""
+  authPublicKeySecretName: tazama-auth-public-key
+  images:
+    cmsMigrate:
+      repository: tazamaorg/case-management-system-migrate
+      tag: ""
+    tcsBackend:
+      repository: tazamaorg/connection-studio-backend
+      tag: ""
+    tcsFrontend:
+      repository: tazamaorg/connection-studio-frontend
+      tag: ""
+    trsBackend:
+      repository: tazamaorg/rule-studio-backend
+      tag: ""
+    trsFrontend:
+      repository: tazamaorg/rule-studio-frontend
+      tag: ""
+    cmsBackend:
+      repository: tazamaorg/case-management-system-backend
+      tag: ""
+    cmsFrontend:
+      repository: tazamaorg/case-management-system-frontend
+      tag: ""
+  services:
+    tcsBackend:
+      port: 3010
+    tcsFrontend:
+      port: 5173
+    trsBackend:
+      port: 3005
+    trsFrontend:
+      port: 5174
+    cmsBackend:
+      port: 3090
+    cmsFrontend:
+      port: 5175
+  urls:
+    tcsApiUrl: ""
+    trsApiUrl: ""
+    cmsApiUrl: ""
+    deapiUrl: ""
+    demsEndpoint: ""
+    adminEndpoint: ""
+    authUrl: ""
+    keycloakUrl: ""
+    natsApiUrl: ""
+    sandboxApiUrl: ""
+    simulationEndpoint: ""
+  env:
+    tcs:
+      FUNCTION_NAME: connection-studio-backend
+      NODE_ENV: dev
+      MAX_CPU: "2"
+      SESSION_TIMEOUT_MINUTES: "30"
+      POSTGRES_HOST: tazama-core-postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "<set-at-deploy-time>"
+      POSTGRES_DB: configuration
+      TAZAMA_AUTH_URL: http://tazama-core-auth:3020/v1/auth
+      AUTH_PUBLIC_KEY_PATH: /auth/test-public-key.pem
+      CERT_PATH_PUBLIC: /auth/test-public-key.pem
+      CONFIGURATION_DATABASE_URL: postgresql://postgres:unused@tazama-core-postgres:5432/configuration
+      CONFIGURATION_DATABASE: configuration
+      CONFIGURATION_DATABASE_USER: postgres
+      CONFIGURATION_DATABASE_PASSWORD: "<set-at-deploy-time>"
+      ENCRYPTION_KEY: "<set-at-deploy-time>"
+      IV_LENGTH: "16"
+      SERVER_URL: nats://tazama-core-nats:4222
+      STARTUP_TYPE: nats
+      PRODUCER_STREAM: config.notification
+      CONSUMER_STREAM: config.notification
+      STREAM_SUBJECT: config.notification
+      SFTP_HOST_CONSUMER: sftp
+      SFTP_PORT_CONSUMER: "22"
+      SFTP_USERNAME_CONSUMER: "<set-at-deploy-time>"
+      SFTP_PASSWORD_CONSUMER: "<set-at-deploy-time>"
+      SFTP_HOST_PRODUCER: sftp
+      SFTP_PORT_PRODUCER: "22"
+      SFTP_USERNAME_PRODUCER: "<set-at-deploy-time>"
+      SFTP_PASSWORD_PRODUCER: "<set-at-deploy-time>"
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: "587"
+      SMTP_SECURE: "false"
+      SMTP_USER: "<set-at-deploy-time>"
+      SMTP_PASS: ""
+      SMTP_FROM_EMAIL: "<set-at-deploy-time>"
+      SMTP_FROM_NAME: Tazama Connection Studio
+      OPENSEARCH_USERNAME: "<set-at-deploy-time>"
+      OPENSEARCH_PASSWORD: "<set-at-deploy-time>"
+      OPENSEARCH_NODE: http://tazama-extensions-opensearch:9200
+      ADMIN_SERVICE_URL: http://tazama-core-admin:5100
+      AUTH_URL: http://tazama-core-keycloak:8080
+      TAZAMA_AUTH_ADMIN_USERNAME: "<set-at-deploy-time>"
+      TAZAMA_AUTH_ADMIN_PASSWORD: "<set-at-deploy-time>"
+      VITE_APP_TITLE: Tazama Connection Studio
+      VITE_APP_ENV: production
+    trs:
+      FUNCTION_NAME: model-management-backend
+      NODE_ENV: dev
+      MAX_CPU: "2"
+      PORT: "3005"
+      TAZAMA_AUTH_URL: http://tazama-core-auth:3020/v1/auth
+      AUTH_PUBLIC_KEY_PATH: /auth/test-public-key.pem
+      CERT_PATH_PUBLIC: /auth/test-public-key.pem
+      ADMIN_SERVICE_URL: http://tazama-core-admin:5100
+      ALLOWED_ORIGINS: ""
+      CRYPTO_SECRET_KEY: "<set-at-deploy-time>"
+      ENCRYPTION_KEY: "<set-at-deploy-time>"
+      IV_LENGTH: abcdefghijklmnop
+      AUDIT_PROVIDER: opensearch
+      OPENSEARCH_NODE: http://tazama-extensions-opensearch:9200
+      OPENSEARCH_USERNAME: "<set-at-deploy-time>"
+      OPENSEARCH_PASSWORD: "<set-at-deploy-time>"
+      OPENSEARCH_INDEX: rule-studio-audit
+      VITE_CRYPTO_KEY: "<set-at-deploy-time>"
+      VITE_APP_NAME: Model Management
+      VITE_APP_VERSION: "0.0.1"
+      TAZAMA_AUTH_ADMIN_USERNAME: "<set-at-deploy-time>"
+      TAZAMA_AUTH_ADMIN_PASSWORD: "<set-at-deploy-time>"
+      DOCKERHUB_TOKEN: "<set-at-deploy-time>"
+      DOCKERHUB_USERNAME: "<set-at-deploy-time>"
+      DOCKERHUB_NAMESPACE: "<set-at-deploy-time>"
+    cms:
+      FUNCTION_NAME: case-management-service
+      NODE_ENV: dev
+      MAX_CPU: "1"
+      PORT: "3090"
+      POSTGRES_DB: tazama_cms
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "<set-at-deploy-time>"
+      POSTGRES_HOST: tazama-extensions-postgres
+      POSTGRES_PORT: "5432"
+      DATABASE_URL: "<set-at-deploy-time>"
+      DWH_DATABASE_URL: "<set-at-deploy-time>"
+      AI_MODEL_ENDPOINT: "<configure-for-your-environment>"
+      TRIAGE_TYPE: MANUAL
+      CONFIDENCE_THRESHOLD: "95"
+      CLIENT_SYSTEM_INTERDICTION_ENABLED: "true"
+      SYSTEM_UUID: a9a8ff94-c7e4-4e6c-b421-e6d5d75a76e1
+      TAZAMA_AUTH_URL: http://tazama-core-auth:3020/v1/auth
+      AUTH_PUBLIC_KEY_PATH: /auth/test-public-key.pem
+      CERT_PATH_PUBLIC: /auth/test-public-key.pem
+      KEYCLOAK_GROUP_NAME: tazama-cms
+      FLOWABLE_URL: http://tazama-extensions-flowable:8080/flowable-rest
+      FLOWABLE_USERNAME: "<set-at-deploy-time>"
+      FLOWABLE_PASSWORD: "<set-at-deploy-time>"
+      SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
+      SPRING_DATASOURCE_URL: jdbc:postgresql://tazama-extensions-postgres:5432/flowable
+      SPRING_DATASOURCE_USERNAME: "<set-at-deploy-time>"
+      SPRING_DATASOURCE_PASSWORD: "<set-at-deploy-time>"
+      SERVER_URL: nats://tazama-core-nats:4222
+      STARTUP_TYPE: nats
+      AUDIT_PROVIDER: opensearch
+      PRODUCER_STREAM: default
+      CONSUMER_STREAM: investigation-service
+      REDIS_HOST: tazama-core-valkey
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: "<set-at-deploy-time>"
+      REDIS_DB: "0"
+      PRIORITY_FIRST_HALF: "0.33"
+      PRIORITY_SECOND_HALF: "0.66"
+      PRIORITY_THIRD_HALF: "1.0"
+      DEFAULT_SLA_HOURS: "72"
+      ALERT_PRIORITY_CRON_SCHEDULE: "0 * * * *"
+      AUTO_ASSIGNMENT_ENABLED: "false"
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: "587"
+      SMTP_USER: "<set-at-deploy-time>"
+      SMTP_PASS: "<set-at-deploy-time>"
+      MAIL_FROM: "<set-at-deploy-time>"
+      TAZAMA_AUTH_ADMIN_USERNAME: "<set-at-deploy-time>"
+      TAZAMA_AUTH_ADMIN_PASSWORD: "<set-at-deploy-time>"
+      COUCHDB_URL: http://tazama-extensions-couchdb:5984
+      COUCHDB_DATABASE: cms-evidence
+      COUCHDB_USER: "<set-at-deploy-time>"
+      COUCHDB_PASSWORD: "<set-at-deploy-time>"
+      VOILA_URL: http://tazama-cms-viola:8866
+      VOILA_BASE_URL: http://tazama-cms-viola:8866
+      GOLD_LAKEHOUSE_API_URL: "<configure-for-your-environment>"
+      OPENSEARCH_NODE: http://tazama-extensions-opensearch:9200
+      OPENSEARCH_USERNAME: "<set-at-deploy-time>"
+      OPENSEARCH_PASSWORD: "<set-at-deploy-time>"
+      OPENSEARCH_SSL_REJECT_UNAUTHORIZED: "false"
+      OPENSEARCH_REFRESH: "true"
+      VITE_CRYPTO_KEY: "<set-at-deploy-time>"
+      VITE_APP_NAME: Tazama Case Management System
+      VITE_APP_VERSION: "0.0.1"
+  resources: {}
+
+biar:
+  enabled: true
+  replicaCount: 1
+  serverAHost: "tazama-core"
+  serverBHost: "tazama-extensions"
+  tika:
+    image:
+      repository: logicalspark/docker-tikaserver
+      tag: latest
+    service:
+      port: 9998
+  solr:
+    image:
+      repository: solr
+      tag: "9"
+    service:
+      port: 8983
+    persistence:
+      enabled: true
+      accessModes: ["ReadWriteOnce"]
+      size: 10Gi
+      storageClass: ""
+  nifi:
+    image:
+      repository: apache/nifi
+      tag: "1.24.0"
+    service:
+      port: 8080
+    persistence:
+      enabled: true
+      accessModes: ["ReadWriteOnce"]
+      size: 20Gi
+      storageClass: ""
+  ozone:
+    image:
+      repository: apache/ozone
+      tag: "2.0.0"
+    scmPort: 9876
+    omPort: 9874
+    s3gPort: 9878
+    reconPort: 9888
+    persistence:
+      enabled: true
+      accessModes: ["ReadWriteOnce"]
+      size: 50Gi
+      storageClass: ""
+    bucketName: biar-bucket
+  awsCli:
+    image:
+      repository: amazon/aws-cli
+      tag: latest
+  resources: {}
+
+jobs:
+  ozoneBucketInit:
+    enabled: true
+    backoffLimit: 3
+  cmsMigrate:
+    enabled: true
+    backoffLimit: 3
