@@ -92,31 +92,6 @@ If ports `18080` is already in use, replace the host-side port number. For examp
 > [!NOTE]  
 > Some pods may briefly show `Pending` or `ContainerCreating` immediately after cluster creation. Give it a minute or two to become ready before you start installing helm charts.
 
-# Stopping the Cluster
-
-`k3d cluster stop tazama-demo`
-
-
-
-# Starting the Cluster
-
-`k3d cluster start tazama-demo`
-
-### Destroy the cluster
-
-Deleting the cluster permanently removes its k3d containers and cluster state:
-
-```
-k3d cluster delete helm-testing
-```
-
-Confirm that it was removed:
-
-```
-k3d cluster list
-```
-
-> Data stored only inside the cluster is deleted with the cluster. Do not use the local cluster for data that must be retained.
 
 # Deploying a helm chart
 
@@ -139,6 +114,31 @@ helm install valkey valkey/valkey
 ```
 
 Run `kubectl get pod --all-namespaces` and wait until valkey in the default namespace is `READY` and the status is `Running`.
+
+# Stopping the Cluster
+
+`k3d cluster stop tazama-demo`
+
+
+# Starting the Cluster
+
+`k3d cluster start tazama-demo`
+
+### Destroy the cluster
+
+Deleting the cluster permanently removes its k3d containers and cluster state:
+
+```
+k3d cluster delete tazama-demo
+```
+
+Confirm that it was removed:
+
+```
+k3d cluster list
+```
+
+> Data stored only inside the cluster is deleted with the cluster. Do not use the local cluster for data that must be retained.
 
 # Misc
 
