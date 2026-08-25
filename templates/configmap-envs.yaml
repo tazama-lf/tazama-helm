@@ -1,0 +1,109 @@
+{{- if or .Values.core.enabled .Values.extensionsApis.enabled .Values.extensions.enabled .Values.biar.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tazama.componentname" (dict "root" . "name" "global-env") }}
+  namespace: {{ include "tazama.namespace" . }}
+  labels:
+    {{- include "tazama.labels" . | nindent 4 }}
+data:
+  {{- range $k, $v := .Values.global.env }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+---
+{{- end }}
+{{- if .Values.core.enabled }}
+{{- range $name, $env := dict "core-env-admin" .Values.core.env.admin "core-env-tms" .Values.core.env.tms "core-env-ed" .Values.core.env.eventDirector "core-env-tp" .Values.core.env.typologyProcessor "core-env-tadp" .Values.core.env.tadp "core-env-ef" .Values.core.env.eventFlow }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tazama.componentname" (dict "root" $ "name" $name) }}
+  namespace: {{ include "tazama.namespace" $ }}
+  labels:
+    {{- include "tazama.labels" $ | nindent 4 }}
+data:
+  {{- range $k, $v := $env }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+---
+{{- end }}
+{{- if .Values.core.auth.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tazama.componentname" (dict "root" . "name" "core-keycloak-realm") }}
+  namespace: {{ include "tazama.namespace" . }}
+  labels:
+    {{- include "tazama.labels" . | nindent 4 }}
+data:
+  00-tazama-test-realm.json: |
+{{ .Files.Get "files/core/keycloak-realm.json" | indent 4 }}
+---
+{{- end }}
+{{- if .Values.core.postgres.bootstrap.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tazama.componentname" (dict "root" . "name" "core-postgres-bootstrap") }}
+  namespace: {{ include "tazama.namespace" . }}
+  labels:
+    {{- include "tazama.labels" . | nindent 4 }}
+data:
+  00-CREATE.sql: |
+{{ .Files.Get "files/core/postgres/00-CREATE.sql" | indent 4 }}
+  01-tcs-init.sql: |
+{{ .Files.Get "files/core/postgres/01-tcs-init.sql" | indent 4 }}
+  02-trs-init.sql: |
+{{ .Files.Get "files/core/postgres/02-trs-init.sql" | indent 4 }}
+  03-DATA.sql: |
+{{- if .Values.core.postgres.bootstrap.fullDockerhubSql }}
+{{ .Values.core.postgres.bootstrap.fullDockerhubSql | indent 4 }}
+{{- else }}
+{{ .Files.Get "files/core/postgres/03-full-dockerhub.sql" | indent 4 }}
+{{- end }}
+---
+{{- end }}
+{{- end }}
+{{- if .Values.extensionsApis.enabled }}
+{{- range $name, $env := dict "extensions-apis-env-deapi" .Values.extensionsApis.env.deapi "extensions-apis-env-dems" .Values.extensionsApis.env.dems }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tazama.componentname" (dict "root" $ "name" $name) }}
+  namespace: {{ include "tazama.namespace" $ }}
+  labels:
+    {{- include "tazama.labels" $ | nindent 4 }}
+data:
+  {{- range $k, $v := $env }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+---
+{{- end }}
+{{- end }}
+{{- if .Values.extensions.enabled }}
+{{- range $name, $env := dict "extensions-env-tcs" .Values.extensions.env.tcs "extensions-env-trs" .Values.extensions.env.trs "extensions-env-cms" .Values.extensions.env.cms }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tazama.componentname" (dict "root" $ "name" $name) }}
+  namespace: {{ include "tazama.namespace" $ }}
+  labels:
+    {{- include "tazama.labels" $ | nindent 4 }}
+data:
+  {{- range $k, $v := $env }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+---
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tazama.componentname" (dict "root" . "name" "extensions-couchdb-ini") }}
+  namespace: {{ include "tazama.namespace" . }}
+  labels:
+    {{- include "tazama.labels" . | nindent 4 }}
+data:
+  local.ini: |
+{{ .Files.Get "files/extensions/couchdb/local.ini" | indent 4 }}
+---
+{{- end }}

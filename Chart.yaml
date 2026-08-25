@@ -1,0 +1,20 @@
+apiVersion: v2
+name: tazama
+description: Helm umbrella chart for a full Tazama 4.0 sandbox-style deployment derived from the Full-Stack-Docker-Tazama mono-repo phased deployment branch.
+type: application
+version: 0.1.0
+appVersion: "4.0.0"
+kubeVersion: ">=1.27.0-0"
+keywords:
+  - tazama
+  - aml
+  - transaction-monitoring
+  - case-management
+  - biar
+home: https://github.com/tazama-lf/Full-Stack-Docker-Tazama
+sources:
+  - https://github.com/tazama-lf/Full-Stack-Docker-Tazama/tree/tazama/feat/mono-repo-phased-deployment
+maintainers:
+  - name: OpenAI
+annotations:
+  artifacthub.io/containsSecurityUpdates: "false"

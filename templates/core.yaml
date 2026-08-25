@@ -1,0 +1,808 @@
+{{- if .Values.core.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "core-postgres") | nindent 2 }}
+spec:
+  type: {{ .Values.core.postgres.service.type }}
+  selector:
+    {{- include "tazama.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: core-postgres
+  ports:
+    - name: postgres
+      port: {{ .Values.core.postgres.service.port }}
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "core-postgres") | nindent 2 }}
+spec:
+  serviceName: {{ include "tazama.core.postgresHost" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: core-postgres
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: core-postgres
+      annotations:
+        {{- include "tazama.podAnnotations" . | nindent 8 }}
+    spec:
+      {{- include "tazama.podSpec" . | nindent 6 }}
+      containers:
+        - name: postgres
+          image: {{ include "tazama.image" (dict "root" . "repository" .Values.core.postgres.image.repository "tag" .Values.core.postgres.image.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_MAX_CONNECTIONS
+              value: {{ .Values.core.postgres.tuning.maxConnections | quote }}
+            - name: POSTGRES_SHARED_BUFFERS
+              value: {{ .Values.core.postgres.tuning.sharedBuffers | quote }}
+            - name: POSTGRES_EFFECTIVE_CACHE_SIZE
+              value: {{ .Values.core.postgres.tuning.effectiveCacheSize | quote }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql
+            {{- if .Values.core.postgres.bootstrap.enabled }}
+            - name: bootstrap
+              mountPath: /docker-entrypoint-initdb.d/00-CREATE.sql
+              subPath: 00-CREATE.sql
+            - name: bootstrap
+              mountPath: /docker-entrypoint-initdb.d/01-tcs-init.sql
+              subPath: 01-tcs-init.sql
+            - name: bootstrap
+              mountPath: /docker-entrypoint-initdb.d/02-trs-init.sql
+              subPath: 02-trs-init.sql
+            - name: bootstrap
+              mountPath: /docker-entrypoint-initdb.d/03-DATA.sql
+              subPath: 03-DATA.sql
+            {{- end }}
+          startupProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER"]
+            failureThreshold: 30
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER"]
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.core.postgres.resources | nindent 12 }}
+      volumes:
+        {{- if .Values.core.postgres.bootstrap.enabled }}
+        - name: bootstrap
+          configMap:
+            name: {{ include "tazama.componentname" (dict "root" . "name" "core-postgres-bootstrap") }}
+        {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          {{- toYaml .Values.core.postgres.persistence.accessModes | nindent 10 }}
+        {{- $storageClass := .Values.core.postgres.persistence.storageClass | default .Values.global.storageClass }}
+        {{- if $storageClass }}
+        storageClassName: {{ $storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.core.postgres.persistence.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "core-valkey") | nindent 2 }}
+spec:
+  type: {{ .Values.core.valkey.service.type }}
+  selector:
+    {{- include "tazama.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: core-valkey
+  ports:
+    - name: redis
+      port: {{ .Values.core.valkey.service.port }}
+      targetPort: redis
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "core-valkey") | nindent 2 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: core-valkey
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: core-valkey
+    spec:
+      {{- include "tazama.podSpec" . | nindent 6 }}
+      containers:
+        - name: valkey
+          image: {{ include "tazama.image" (dict "root" . "repository" .Values.core.valkey.image.repository "tag" .Values.core.valkey.image.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args: ["valkey-server", "--port", "6379", "--loglevel", "verbose"]
+          ports:
+            - name: redis
+              containerPort: 6379
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "valkey-cli -p 6379 ping | grep PONG"]
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "valkey-cli -p 6379 ping | grep PONG"]
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.core.valkey.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "core-nats") | nindent 2 }}
+spec:
+  type: {{ .Values.core.nats.service.type }}
+  selector:
+    {{- include "tazama.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: core-nats
+  ports:
+    - name: client
+      port: {{ .Values.core.nats.service.clientPort }}
+      targetPort: client
+    - name: cluster
+      port: {{ .Values.core.nats.service.clusterPort }}
+      targetPort: cluster
+    - name: monitor
+      port: {{ .Values.core.nats.service.monitorPort }}
+      targetPort: monitor
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "core-nats") | nindent 2 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: core-nats
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: core-nats
+    spec:
+      {{- include "tazama.podSpec" . | nindent 6 }}
+      containers:
+        - name: nats
+          image: {{ include "tazama.image" (dict "root" . "repository" .Values.core.nats.image.repository "tag" .Values.core.nats.image.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          {{- include "tazama.containerSecurityContext" . | nindent 10 }}
+          args: ["-DVV"]
+          ports:
+            - name: client
+              containerPort: 4222
+            - name: cluster
+              containerPort: 6222
+            - name: monitor
+              containerPort: 8222
+          resources:
+            {{- toYaml .Values.core.nats.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "core-admin") | nindent 2 }}
+spec:
+  selector:
+    {{- include "tazama.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: core-admin
+  ports:
+    - name: http
+      port: {{ .Values.core.services.admin.servicePort }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "core-admin") | nindent 2 }}
+spec:
+  replicas: {{ .Values.core.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: core-admin
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: core-admin
+    spec:
+      {{- include "tazama.podSpec" . | nindent 6 }}
+      {{- include "tazama.coreDependencyInitContainers" . | nindent 6 }}
+      containers:
+        - name: admin-service
+          image: {{ include "tazama.image" (dict "root" . "repository" .Values.core.images.adminService.repository "tag" .Values.core.images.adminService.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          {{- include "tazama.containerSecurityContext" . | nindent 10 }}
+          {{- include "tazama.envFrom" (dict "root" . "component" "core-env-admin") | nindent 10 }}
+          env:
+            - name: EVALUATION_DATABASE_HOST
+              value: {{ include "tazama.core.postgresHost" . }}
+            - name: CONFIGURATION_DATABASE_HOST
+              value: {{ include "tazama.core.postgresHost" . }}
+            - name: EVENT_HISTORY_DATABASE_HOST
+              value: {{ include "tazama.core.postgresHost" . }}
+            - name: RAW_HISTORY_DATABASE_HOST
+              value: {{ include "tazama.core.postgresHost" . }}
+            - name: EVALUATION_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: POSTGRES_PASSWORD
+            - name: CONFIGURATION_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: POSTGRES_PASSWORD
+            - name: RAW_HISTORY_DATABASE
+              value: raw_history
+            - name: EVENT_HISTORY_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: POSTGRES_USER
+            - name: EVENT_HISTORY_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: POSTGRES_PASSWORD
+            - name: RAW_HISTORY_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: POSTGRES_USER
+            - name: RAW_HISTORY_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: POSTGRES_PASSWORD
+            - name: REDIS_SERVERS
+              value: {{ printf "[{\"host\":\"%s\", \"port\":6379}]" (include "tazama.core.valkeyHost" .) | quote }}
+            - name: STARTUP_TYPE
+              value: nats
+            - name: SERVER_URL
+              value: {{ printf "%s:%v" (include "tazama.core.natsHost" .) .Values.core.nats.service.clientPort | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: POSTGRES_PASSWORD
+            {{- if .Values.core.auth.enabled }}
+            - name: AUTHENTICATED
+              value: "true"
+            - name: CERT_PATH_PUBLIC
+              value: /auth/test-public-key.pem
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.core.services.admin.port }}
+          {{- if .Values.core.auth.enabled }}
+          volumeMounts:
+            - name: auth-keys
+              mountPath: /auth
+              readOnly: true
+          {{- end }}
+          resources:
+            {{- toYaml .Values.core.resources | nindent 12 }}
+      volumes:
+        {{- if .Values.core.auth.enabled }}
+        - name: auth-keys
+          secret:
+            secretName: {{ .Values.extensions.authPublicKeySecretName }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "core-tms") | nindent 2 }}
+spec:
+  selector:
+    {{- include "tazama.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: core-tms
+  ports:
+    - name: http
+      port: {{ .Values.core.services.tms.servicePort }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "core-tms") | nindent 2 }}
+spec:
+  replicas: {{ .Values.core.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: core-tms
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: core-tms
+    spec:
+      {{- include "tazama.podSpec" . | nindent 6 }}
+      {{- include "tazama.coreDependencyInitContainers" . | nindent 6 }}
+      containers:
+        - name: tms
+          image: {{ include "tazama.image" (dict "root" . "repository" .Values.core.images.tms.repository "tag" .Values.core.images.tms.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          {{- include "tazama.containerSecurityContext" . | nindent 10 }}
+          {{- include "tazama.envFrom" (dict "root" . "component" "core-env-tms") | nindent 10 }}
+          env:
+            - name: RAW_HISTORY_DATABASE_HOST
+              value: {{ include "tazama.core.postgresHost" . }}
+            - name: EVENT_HISTORY_DATABASE_HOST
+              value: {{ include "tazama.core.postgresHost" . }}
+            - name: REDIS_SERVERS
+              value: {{ printf "[{\"host\":\"%s\", \"port\":6379}]" (include "tazama.core.valkeyHost" .) | quote }}
+            - name: SERVER_URL
+              value: {{ printf "%s:%v" (include "tazama.core.natsHost" .) .Values.core.nats.service.clientPort | quote }}
+            - name: PRODUCER_STREAM
+              value: event-director
+            - name: RAW_HISTORY_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: POSTGRES_PASSWORD
+            - name: EVENT_HISTORY_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: POSTGRES_PASSWORD
+            {{- if .Values.core.auth.enabled }}
+            - name: AUTHENTICATED
+              value: "true"
+            - name: CERT_PATH_PUBLIC
+              value: /auth/test-public-key.pem
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.core.services.tms.port }}
+          {{- if .Values.core.auth.enabled }}
+          volumeMounts:
+            - name: auth-keys
+              mountPath: /auth
+              readOnly: true
+          {{- end }}
+          resources:
+            {{- toYaml .Values.core.resources | nindent 12 }}
+      volumes:
+        {{- if .Values.core.auth.enabled }}
+        - name: auth-keys
+          secret:
+            secretName: {{ .Values.extensions.authPublicKeySecretName }}
+        {{- end }}
+---
+{{- range $item := list
+    (list "core-ed" "core-ed" $.Values.core.images.eventDirector "core-env-ed" $.Values.core.services.eventDirector.port)
+    (list "core-tp" "core-tp" $.Values.core.images.typologyProcessor "core-env-tp" $.Values.core.services.typologyProcessor.port)
+    (list "core-tadp" "core-tadp" $.Values.core.images.tadp "core-env-tadp" $.Values.core.services.tadp.port)
+    (list "core-ef" "core-ef" $.Values.core.images.eventFlow "core-env-ef" $.Values.core.services.eventFlow.port)
+}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tazama.componentname" (dict "root" $ "name" (index $item 0)) }}
+  namespace: {{ include "tazama.namespace" $ }}
+  labels:
+    {{- include "tazama.labels" $ | nindent 4 }}
+spec:
+  selector:
+    {{- include "tazama.selectorLabels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ index $item 1 }}
+  ports:
+    - name: http
+      port: {{ index $item 4 }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tazama.componentname" (dict "root" $ "name" (index $item 0)) }}
+  namespace: {{ include "tazama.namespace" $ }}
+  labels:
+    {{- include "tazama.labels" $ | nindent 4 }}
+spec:
+  replicas: {{ $.Values.core.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ index $item 1 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ index $item 1 }}
+    spec:
+      {{- include "tazama.podSpec" $ | nindent 6 }}
+      {{- include "tazama.coreDependencyInitContainers" $ | nindent 6 }}
+      containers:
+        - name: {{ index $item 1 }}
+          image: {{ include "tazama.image" (dict "root" $ "repository" (index $item 2).repository "tag" (index $item 2).tag) }}
+          imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
+          {{- include "tazama.containerSecurityContext" $ | nindent 10 }}
+          {{- include "tazama.envFrom" (dict "root" $ "component" (index $item 3)) | nindent 10 }}
+          env:
+            - name: CONFIGURATION_DATABASE_HOST
+              value: {{ include "tazama.core.postgresHost" $ }}
+            - name: CONFIGURATION_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" $ }}
+                  key: POSTGRES_USER
+            - name: RAW_HISTORY_DATABASE_HOST
+              value: {{ include "tazama.core.postgresHost" $ }}
+            - name: RAW_HISTORY_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" $ }}
+                  key: POSTGRES_USER
+            - name: EVENT_HISTORY_DATABASE_HOST
+              value: {{ include "tazama.core.postgresHost" $ }}
+            - name: EVENT_HISTORY_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" $ }}
+                  key: POSTGRES_USER
+            - name: EVALUATION_DATABASE_HOST
+              value: {{ include "tazama.core.postgresHost" $ }}
+            - name: EVALUATION_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" $ }}
+                  key: POSTGRES_USER
+            - name: REDIS_SERVERS
+              value: {{ printf "[{\"host\":\"%s\", \"port\":6379}]" (include "tazama.core.valkeyHost" $) | quote }}
+            - name: SERVER_URL
+              value: {{ printf "%s:%v" (include "tazama.core.natsHost" $) $.Values.core.nats.service.clientPort | quote }}
+            - name: CONFIGURATION_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" $ }}
+                  key: POSTGRES_PASSWORD
+            - name: RAW_HISTORY_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" $ }}
+                  key: POSTGRES_PASSWORD
+            - name: EVENT_HISTORY_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" $ }}
+                  key: POSTGRES_PASSWORD
+            - name: EVALUATION_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" $ }}
+                  key: POSTGRES_PASSWORD
+          ports:
+            - name: http
+              containerPort: {{ index $item 4 }}
+          resources:
+            {{- toYaml $.Values.core.resources | nindent 12 }}
+---
+{{- end }}
+{{- if .Values.core.auth.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "core-keycloak") | nindent 2 }}
+spec:
+  selector:
+    {{- include "tazama.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: core-keycloak
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+{{- if .Values.core.keycloak.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "core-keycloak-data") | nindent 2 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.core.keycloak.persistence.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.core.keycloak.persistence.size | quote }}
+  {{- with .Values.core.keycloak.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "core-keycloak") | nindent 2 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: core-keycloak
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: core-keycloak
+    spec:
+      {{- include "tazama.podSpec" . | nindent 6 }}
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:23.0.6
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args: ["start-dev", "--import-realm"]
+          env:
+            - name: KEYCLOAK_ADMIN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: KEYCLOAK_ADMIN
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: KEYCLOAK_ADMIN_PASSWORD
+            - name: KC_HOSTNAME_STRICT_BACKCHANNEL
+              value: "false"
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_HOSTNAME_STRICT_HTTPS
+              value: "false"
+            - name: KC_PROXY
+              value: edge
+            - name: KEYCLOAK_IMPORT_STRATEGY
+              value: IGNORE_EXISTING
+            - name: QUARKUS_HTTP_ACCESS_LOG_ENABLED
+              value: "true"
+            - name: KC_LOG_LEVEL
+              value: INFO
+          ports:
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            {{- if .Values.core.keycloak.persistence.enabled }}
+            - name: keycloak-data
+              mountPath: /opt/keycloak/data/h2
+            {{- end }}
+            - name: keycloak-realm
+              mountPath: /opt/keycloak/data/import/00-tazama-test-realm.json
+              subPath: 00-tazama-test-realm.json
+          resources:
+            {{- toYaml .Values.core.resources | nindent 12 }}
+      volumes:
+        {{- if .Values.core.keycloak.persistence.enabled }}
+        - name: keycloak-data
+          persistentVolumeClaim:
+            claimName: {{ include "tazama.componentname" (dict "root" . "name" "core-keycloak-data") }}
+        {{- end }}
+        - name: keycloak-realm
+          configMap:
+            name: {{ include "tazama.componentname" (dict "root" . "name" "core-keycloak-realm") }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "core-auth") | nindent 2 }}
+spec:
+  selector:
+    {{- include "tazama.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: core-auth
+  ports:
+    - name: http
+      port: 3020
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "core-auth") | nindent 2 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: core-auth
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: core-auth
+    spec:
+      {{- include "tazama.podSpec" . | nindent 6 }}
+      containers:
+        - name: auth
+          image: {{ include "tazama.image" (dict "root" . "repository" "tazamaorg/auth-service" "tag" .Values.global.tazamaVersion) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          {{- include "tazama.containerSecurityContext" . | nindent 10 }}
+          env:
+            - name: FUNCTION_NAME
+              value: auth-service
+            - name: NODE_ENV
+              value: dev
+            - name: MAX_CPU
+              value: "1"
+            - name: HOST
+              value: 0.0.0.0
+            - name: PORT
+              value: "3020"
+            - name: AUTH_PROVIDER
+              value: "@tazama-lf/auth-lib-provider-keycloak"
+            - name: CERT_PATH_PRIVATE
+              value: test-private-key.pem
+            - name: KEYCLOAK_SERVER_URL
+              value: {{ printf "http://%s:8080" (include "tazama.componentname" (dict "root" . "name" "core-keycloak")) | quote }}
+            - name: AUTH_URL
+              value: {{ printf "http://%s:8080" (include "tazama.componentname" (dict "root" . "name" "core-keycloak")) | quote }}
+            - name: KEYCLOAK_REALM
+              value: tazama
+            - name: CLIENT_SECRET
+              value: auth-lib-client-test-secret
+            - name: CLIENT_ID
+              value: auth-lib-client
+            - name: LOG_LEVEL
+              value: info
+            - name: CERT_PATH_PUBLIC
+              value: /auth/test-public-key.pem
+          ports:
+            - name: http
+              containerPort: 3020
+          volumeMounts:
+            - name: auth-keys
+              mountPath: /home/app/test-private-key.pem
+              subPath: test-private-key.pem
+              readOnly: true
+            - name: auth-keys
+              mountPath: /home/app/test-public-key.pem
+              subPath: test-public-key.pem
+              readOnly: true
+          resources:
+            {{- toYaml .Values.core.resources | nindent 12 }}
+      volumes:
+        - name: auth-keys
+          secret:
+            secretName: {{ .Values.extensions.authPublicKeySecretName }}
+{{- end }}
+{{- if .Values.core.rules.fullEnabled }}
+---
+{{- range $rule := .Values.core.rules.enabledRules }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tazama.componentname" (dict "root" $ "name" (printf "rule-%s" $rule)) }}
+  namespace: {{ include "tazama.namespace" $ }}
+  labels:
+    {{- include "tazama.labels" $ | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ printf "rule-%s" $rule }}
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ printf "rule-%s" $rule }}
+    spec:
+      {{- include "tazama.podSpec" $ | nindent 6 }}
+      {{- include "tazama.coreDependencyInitContainers" $ | nindent 6 }}
+      containers:
+        - name: {{ printf "rule-%s" $rule }}
+          image: {{ include "tazama.image" (dict "root" $ "repository" (printf "tazamaorg/rule-%s" $rule) "tag" $.Values.global.tazamaVersion) }}
+          imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
+          {{- include "tazama.containerSecurityContext" $ | nindent 10 }}
+          env:
+            - name: FUNCTION_NAME
+              value: {{ printf "rule-%s-rel-%s" $rule $.Values.global.tazamaVersion | quote }}
+            - name: RULE_VERSION
+              value: "1.0.0"
+            - name: RULE_NAME
+              value: {{ $rule | quote }}
+            - name: NODE_ENV
+              value: dev
+            - name: MAX_CPU
+              value: "1"
+            - name: SUPPRESS_ALERTS
+              value: "true"
+            - name: LOCAL_CACHETTL
+              value: "300"
+            - name: LOCAL_CACHE_ENABLED
+              value: "true"
+            - name: RAW_HISTORY_DATABASE
+              value: raw_history
+            - name: RAW_HISTORY_DATABASE_HOST
+              value: {{ include "tazama.core.postgresHost" $ }}
+            - name: RAW_HISTORY_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" $ }}
+                  key: POSTGRES_USER
+            - name: RAW_HISTORY_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" $ }}
+                  key: POSTGRES_PASSWORD
+            - name: CONFIGURATION_DATABASE
+              value: configuration
+            - name: CONFIGURATION_DATABASE_HOST
+              value: {{ include "tazama.core.postgresHost" $ }}
+            - name: CONFIGURATION_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" $ }}
+                  key: POSTGRES_USER
+            - name: CONFIGURATION_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" $ }}
+                  key: POSTGRES_PASSWORD
+            - name: EVENT_HISTORY_DATABASE
+              value: event_history
+            - name: EVENT_HISTORY_DATABASE_HOST
+              value: {{ include "tazama.core.postgresHost" $ }}
+            - name: EVENT_HISTORY_DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" $ }}
+                  key: POSTGRES_USER
+            - name: EVENT_HISTORY_DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" $ }}
+                  key: POSTGRES_PASSWORD
+            - name: LOG_LEVEL
+              value: info
+            - name: STARTUP_TYPE
+              value: nats
+            - name: SERVER_URL
+              value: {{ printf "%s:%v" (include "tazama.core.natsHost" $) $.Values.core.nats.service.clientPort | quote }}
+            - name: APM_ACTIVE
+              value: "false"
+            - name: APM_SERVICE_NAME
+              value: {{ printf "rule-%s" $rule | quote }}
+            - name: APM_URL
+              value: http://apm:8200
+          resources:
+            {{- toYaml $.Values.core.resources | nindent 12 }}
+---
+{{- end }}
+{{- end }}
+{{- end }}

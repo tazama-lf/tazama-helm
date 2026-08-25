@@ -1,0 +1,420 @@
+{{- if .Values.biar.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "biar-tika") | nindent 2 }}
+spec:
+  selector:
+    {{- include "tazama.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: biar-tika
+  ports:
+    - name: http
+      port: {{ .Values.biar.tika.service.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "biar-tika") | nindent 2 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: biar-tika
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: biar-tika
+    spec:
+      {{- include "tazama.podSpec" . | nindent 6 }}
+      containers:
+        - name: tika
+          image: {{ include "tazama.image" (dict "root" . "repository" .Values.biar.tika.image.repository "tag" .Values.biar.tika.image.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 9998
+          env:
+            - name: JAVA_OPTS
+              value: -Xms256m -Xmx512m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "biar-solr") | nindent 2 }}
+spec:
+  selector:
+    {{- include "tazama.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: biar-solr
+  ports:
+    - name: http
+      port: {{ .Values.biar.solr.service.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "biar-solr") | nindent 2 }}
+spec:
+  serviceName: {{ include "tazama.biar.solrHost" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: biar-solr
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: biar-solr
+    spec:
+      {{- include "tazama.podSpec" . | nindent 6 }}
+      containers:
+        - name: solr
+          image: {{ include "tazama.image" (dict "root" . "repository" .Values.biar.solr.image.repository "tag" .Values.biar.solr.image.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command: ["sh", "-c", "mkdir -p /var/solr/data && solr-precreate biar_docs /opt/solr/server/solr/configsets/sample_techproducts_configs"]
+          env:
+            - name: SOLR_HEAP
+              value: 512m
+          ports:
+            - name: http
+              containerPort: 8983
+          volumeMounts:
+            - name: data
+              mountPath: /var/solr
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          {{- toYaml .Values.biar.solr.persistence.accessModes | nindent 10 }}
+        {{- $storageClass := .Values.biar.solr.persistence.storageClass | default .Values.global.storageClass }}
+        {{- if $storageClass }}
+        storageClassName: {{ $storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.biar.solr.persistence.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "biar-nifi") | nindent 2 }}
+spec:
+  selector:
+    {{- include "tazama.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: biar-nifi
+  ports:
+    - name: http
+      port: {{ .Values.biar.nifi.service.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "biar-nifi") | nindent 2 }}
+spec:
+  serviceName: {{ include "tazama.biar.nifiHost" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: biar-nifi
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: biar-nifi
+    spec:
+      {{- include "tazama.podSpec" . | nindent 6 }}
+      containers:
+        - name: nifi
+          image: {{ include "tazama.image" (dict "root" . "repository" .Values.biar.nifi.image.repository "tag" .Values.biar.nifi.image.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8088
+          env:
+            - name: NIFI_WEB_HTTP_PORT
+              value: "8088"
+            - name: NIFI_WEB_HTTP_HOST
+              value: 0.0.0.0
+            - name: SINGLE_USER_CREDENTIALS_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: NIFI_ADMIN_USER
+            - name: SINGLE_USER_CREDENTIALS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tazama.credentialsSecretName" . }}
+                  key: NIFI_ADMIN_PASSWORD
+            - name: NIFI_JVM_HEAP_INIT
+              value: 512m
+            - name: NIFI_JVM_HEAP_MAX
+              value: 1g
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          {{- toYaml .Values.biar.nifi.persistence.accessModes | nindent 10 }}
+        {{- $storageClass := .Values.biar.nifi.persistence.storageClass | default .Values.global.storageClass }}
+        {{- if $storageClass }}
+        storageClassName: {{ $storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.biar.nifi.persistence.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "biar-datanode") | nindent 2 }}
+spec:
+  selector:
+    {{- include "tazama.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: biar-datanode
+  ports:
+    - name: tcp
+      port: 9882
+      targetPort: tcp
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "biar-datanode") | nindent 2 }}
+spec:
+  serviceName: {{ include "tazama.componentname" (dict "root" . "name" "biar-datanode") }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: biar-datanode
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: biar-datanode
+    spec:
+      {{- include "tazama.podSpec" . | nindent 6 }}
+      containers:
+        - name: datanode
+          image: {{ include "tazama.image" (dict "root" . "repository" .Values.biar.ozone.image.repository "tag" .Values.biar.ozone.image.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args: ["ozone", "datanode"]
+          env:
+            - name: OZONE-SITE.XML_hdds.datanode.dir
+              value: /data/hdds
+            - name: OZONE-SITE.XML_ozone.metadata.dirs
+              value: /data/metadata
+            - name: OZONE-SITE.XML_ozone.scm.names
+              value: {{ include "tazama.biar.scmHost" . | quote }}
+            - name: OZONE-SITE.XML_ozone.scm.client.address
+              value: {{ include "tazama.biar.scmHost" . | quote }}
+            - name: OZONE-SITE.XML_ozone.scm.block.client.address
+              value: {{ include "tazama.biar.scmHost" . | quote }}
+            - name: OZONE-SITE.XML_ozone.om.address
+              value: {{ include "tazama.biar.omHost" . | quote }}
+          ports:
+            - name: tcp
+              containerPort: 9882
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          {{- toYaml .Values.biar.ozone.persistence.accessModes | nindent 10 }}
+        {{- $storageClass := .Values.biar.ozone.persistence.storageClass | default .Values.global.storageClass }}
+        {{- if $storageClass }}
+        storageClassName: {{ $storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.biar.ozone.persistence.size }}
+---
+{{- range $item := list
+    (list "biar-scm" "scm" (include "tazama.biar.scmHost" $) $.Values.biar.ozone.scmPort)
+    (list "biar-om" "om" (include "tazama.biar.omHost" $) $.Values.biar.ozone.omPort)
+    (list "biar-recon" "recon" (include "tazama.biar.reconHost" $) $.Values.biar.ozone.reconPort)
+    (list "biar-s3g" "s3g" (include "tazama.biar.s3gHost" $) $.Values.biar.ozone.s3gPort)
+}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ index $item 2 }}
+  namespace: {{ include "tazama.namespace" $ }}
+  labels:
+    {{- include "tazama.labels" $ | nindent 4 }}
+spec:
+  selector:
+    {{- include "tazama.selectorLabels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ index $item 0 }}
+  ports:
+    - name: tcp
+      port: {{ index $item 3 }}
+      targetPort: tcp
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ index $item 2 }}
+  namespace: {{ include "tazama.namespace" $ }}
+  labels:
+    {{- include "tazama.labels" $ | nindent 4 }}
+spec:
+  serviceName: {{ index $item 2 }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tazama.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ index $item 0 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ index $item 0 }}
+    spec:
+      {{- include "tazama.podSpec" $ | nindent 6 }}
+      containers:
+        - name: {{ index $item 1 }}
+          image: {{ include "tazama.image" (dict "root" $ "repository" $.Values.biar.ozone.image.repository "tag" $.Values.biar.ozone.image.tag) }}
+          imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
+          args: ["ozone", "{{ index $item 1 }}"]
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OZONE-SITE.XML_hdds.datanode.dir
+              value: /data/hdds
+            - name: OZONE-SITE.XML_ozone.metadata.dirs
+              value: /data/metadata
+            - name: OZONE-SITE.XML_ozone.scm.names
+              value: {{ include "tazama.biar.scmHost" $ | quote }}
+            - name: OZONE-SITE.XML_ozone.scm.client.address
+              value: {{ include "tazama.biar.scmHost" $ | quote }}
+            - name: OZONE-SITE.XML_ozone.scm.block.client.address
+              value: {{ include "tazama.biar.scmHost" $ | quote }}
+            {{- if eq (index $item 1) "scm" }}
+            - name: ENSURE_SCM_INITIALIZED
+              value: /data/metadata/scm/current/VERSION
+            - name: OZONE-SITE.XML_ozone.scm.pipeline.owner.container.count
+              value: "1"
+            - name: OZONE-SITE.XML_ozone.scm.ratis.pipeline.limit
+              value: "1"
+            - name: OZONE-SITE.XML_ozone.om.service.ids
+              value: omServiceIdDefault
+            - name: OZONE-SITE.XML_ozone.om.nodes.omServiceIdDefault
+              value: om1
+            - name: OZONE-SITE.XML_ozone.om.node.id
+              value: om1
+            - name: OZONE-SITE.XML_ozone.om.address.omServiceIdDefault.om1
+              value: {{ printf "%s:9862" (include "tazama.biar.omHost" $) | quote }}
+            {{- end }}
+            {{- if eq (index $item 1) "om" }}
+            - name: OZONE-SITE.XML_ozone.om.address
+              value: {{ printf "$(POD_NAME).%s" (include "tazama.biar.omHost" $) | quote }}
+            - name: OZONE-SITE.XML_ozone.om.http-address
+              value: {{ printf "$(POD_NAME).%s:%v" (include "tazama.biar.omHost" $) $.Values.biar.ozone.omPort | quote }}
+            - name: ENSURE_OM_INITIALIZED
+              value: /data/metadata/om/current/VERSION
+            - name: WAITFOR
+              value: {{ printf "%s:%v" (include "tazama.biar.scmHost" $) $.Values.biar.ozone.scmPort | quote }}
+            - name: OZONE-SITE.XML_ozone.om.internal.service.id
+              value: omServiceIdDefault
+            - name: OZONE-SITE.XML_ozone.om.service.ids
+              value: omServiceIdDefault
+            - name: OZONE-SITE.XML_ozone.om.nodes.omServiceIdDefault
+              value: om1
+            - name: OZONE-SITE.XML_ozone.om.node.id
+              value: om1
+            - name: OZONE-SITE.XML_ozone.om.address.omServiceIdDefault.om1
+              value: {{ printf "$(POD_NAME).%s:9862" (include "tazama.biar.omHost" $) | quote }}
+            {{- end }}
+            {{- if eq (index $item 1) "recon" }}
+            - name: OZONE-SITE.XML_ozone.om.address
+              value: {{ include "tazama.biar.omHost" $ | quote }}
+            - name: OZONE-SITE.XML_ozone.om.http-address
+              value: {{ printf "%s:%v" (include "tazama.biar.omHost" $) $.Values.biar.ozone.omPort | quote }}
+            - name: OZONE-SITE.XML_ozone.recon.address
+              value: {{ printf "%s:9891" (include "tazama.biar.reconHost" $) | quote }}
+            - name: OZONE-SITE.XML_ozone.recon.db.dir
+              value: /data/metadata/recon
+            - name: OZONE-SITE.XML_ozone.recon.om.db.dir
+              value: /data/metadata/recon/om
+            - name: OZONE-SITE.XML_ozone.recon.scm.db.dirs
+              value: /data/metadata/recon/scm
+            - name: OZONE-SITE.XML_ozone.replication
+              value: "1"
+            - name: OZONE-SITE.XML_ozone.scm.datanode.id.dir
+              value: /data
+            {{- end }}
+            {{- if eq (index $item 1) "s3g" }}
+            - name: OZONE-SITE.XML_ozone.om.address
+              value: {{ include "tazama.biar.omHost" $ | quote }}
+            - name: OZONE-SITE.XML_ozone.om.http-address
+              value: {{ printf "%s:%v" (include "tazama.biar.omHost" $) $.Values.biar.ozone.omPort | quote }}
+            - name: OZONE-SITE.XML_ozone.s3g.http-address
+              value: {{ printf "0.0.0.0:%v" $.Values.biar.ozone.s3gPort | quote }}
+            - name: OZONE-SITE.XML_ozone.s3g.domain.name
+              value: s3g
+            - name: OZONE-SITE.XML_ozone.s3g.access.key
+              value: admin
+            - name: OZONE-SITE.XML_ozone.s3g.secret.key
+              value: admin
+            {{- end }}
+          ports:
+            - name: tcp
+              containerPort: {{ index $item 3 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          {{- toYaml $.Values.biar.ozone.persistence.accessModes | nindent 10 }}
+        {{- $storageClass := $.Values.biar.ozone.persistence.storageClass | default $.Values.global.storageClass }}
+        {{- if $storageClass }}
+        storageClassName: {{ $storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $.Values.biar.ozone.persistence.size }}
+---
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  {{- include "tazama.metadata" (dict "root" . "name" "biar-ozone-bucket-init") | nindent 2 }}
+spec:
+  backoffLimit: {{ .Values.jobs.ozoneBucketInit.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "tazama.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: biar-ozone-bucket-init
+    spec:
+      restartPolicy: Never
+      {{- include "tazama.podSpec" . | nindent 6 }}
+      containers:
+        - name: aws-cli
+          image: {{ include "tazama.image" (dict "root" . "repository" .Values.biar.awsCli.image.repository "tag" .Values.biar.awsCli.image.tag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              aws configure set aws_access_key_id admin
+              aws configure set aws_secret_access_key admin
+              aws configure set default.region us-east-1
+              aws --endpoint-url http://{{ include "tazama.biar.s3gHost" . }}:{{ .Values.biar.ozone.s3gPort }} s3 mb s3://{{ .Values.biar.ozone.bucketName }} || true
+{{- end }}
