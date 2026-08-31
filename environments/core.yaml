@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+# Production-oriented core: infra, pipeline, Auth, Keycloak, relays, rules 901 and 902.
+
+install:
+  postgresql: true
+  postgresqlReplica: false
+  nats: true
+  valkey: true
+  admin: true
+  tms: true
+  eventDirector: true
+  eventFlow: true
+  typologyProcessor: true
+  eventAdjudicator: true
+  relay: true
+  rules: true
+  auth: true
+  keycloak: true
+  connectionStudio: false
+  ruleStudio: false
+  cms: false
+  deapi: false
+  dems: false
+  opensearch: false
+  couchdb: false
+  flowable: false
+  sftp: false
+  biar: false
+
+rules:
+  enabled:
+    - "901"
+    - "902"

@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Overlay on dockerhub. Uncomment when you have private / frmscoe rule images.
+# Public tazamaorg/rule-NNN images stay on docker.io unless you set imageRegistry.
+
+# rules:
+#   imageRegistry: ghcr.io/frmscoe

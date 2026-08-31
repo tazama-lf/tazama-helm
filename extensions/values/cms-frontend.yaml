@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+name: cms-frontend
+fullnameOverride: cms-frontend
+replicaCount: 1
+service:
+  enabled: true
+  port: 5175
+  targetPort: 5175
+probes:
+  enabled: false
+startupChecks:
+  enabled: false
+env:
+  VITE_APP_NAME: Tazama Case Management System

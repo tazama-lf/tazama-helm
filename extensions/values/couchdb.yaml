@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+name: couchdb
+fullnameOverride: couchdb
+kind: StatefulSet
+replicaCount: 1
+image:
+  repository: couchdb
+  tag: "3.3"
+service:
+  enabled: true
+  port: 5984
+  targetPort: 5984
+probes:
+  enabled: false
+startupChecks:
+  enabled: false
+persistence:
+  enabled: true
+  size: 10Gi
+  mountPath: /opt/couchdb/data
+env:
+  COUCHDB_USER: admin
+  COUCHDB_PASSWORD: unused

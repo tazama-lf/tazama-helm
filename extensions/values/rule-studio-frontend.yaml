@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+name: rule-studio-frontend
+fullnameOverride: rule-studio-frontend
+replicaCount: 1
+service:
+  enabled: true
+  port: 5174
+  targetPort: 5174
+probes:
+  enabled: false
+startupChecks:
+  enabled: false
+env:
+  VITE_APP_NAME: Model Management

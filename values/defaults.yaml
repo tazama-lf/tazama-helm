@@ -1,0 +1,136 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Shared defaults. Profile files (core / dockerhub / member) and cloud files
+# (onprem / eks / gke / aks) overlay this. values/secrets.yaml overlays last.
+
+namespace: tazama
+cloud: onprem
+storageClass: ""
+workerOnly: false
+
+global:
+  tazamaVersion: "rc"
+  imageRegistry: docker.io/tazamaorg
+  imagePullPolicy: IfNotPresent
+  ruleRel: "4-0-0"
+
+hosts:
+  postgresql: postgresql
+  postgresqlReplica: postgresql-replica
+  nats: nats
+  valkey: valkey
+  keycloak: keycloak
+  opensearch: opensearch
+  couchdb: couchdb
+  flowable: flowable
+  sftp: sftp
+
+ingress:
+  enabled: false
+  className: nginx
+  domain: tazama.local
+  annotations: {}
+  tls: []
+
+install:
+  postgresql: true
+  postgresqlReplica: false
+  nats: true
+  valkey: true
+  ingressNginx: false
+  certManager: false
+  admin: true
+  tms: true
+  eventDirector: true
+  eventFlow: true
+  typologyProcessor: true
+  eventAdjudicator: true
+  relay: true
+  rules: true
+  auth: true
+  keycloak: true
+  demo: false
+  batchPpa: false
+  connectionStudio: false
+  ruleStudio: false
+  cms: false
+  deapi: false
+  dems: false
+  opensearch: false
+  couchdb: false
+  flowable: false
+  sftp: false
+  biar: false
+
+# AUTHENTICATED on TMS / admin. Auth-service and Keycloak are still installed
+# when install.auth / install.keycloak are true. Set true after you trust the
+# key pair in values/secrets.yaml.
+auth:
+  authenticated: false
+
+# Per-service destination transport for the three relays. Helm does not install
+# Kafka or RabbitMQ brokers. NATS is already core infra.
+relay:
+  efrup:
+    transport: nats
+  tp:
+    transport: nats
+  ea:
+    transport: nats
+  kafka:
+    brokers: ""
+  rabbitmq:
+    url: ""
+  rest:
+    url: ""
+    authUsername: ""
+    authPassword: ""
+
+rules:
+  enabled:
+    - "901"
+    - "902"
+  imageRegistry: ""
+  extraEnv: {}
+
+imagePullSecrets: []
+
+postgres:
+  imageTag: "18"
+  persistenceSize: 10Gi
+  replicaPersistenceSize: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+nats:
+  jetstreamSize: 8Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+valkey:
+  auth: false
+  replicaEnabled: false
+  replicas: 1
+  persistenceSize: 1Gi
+
+ingressNginx:
+  replicaCount: 1
+  serviceType: LoadBalancer
+  serviceAnnotations: {}
+
+startupChecks:
+  enabled: true
+  postgresImage: postgres:16
+  busyboxImage: busybox:1.36
+  schemaDatabase: raw_history
+  schemaTable: pain013

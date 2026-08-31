@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+name: connection-studio-frontend
+fullnameOverride: connection-studio-frontend
+replicaCount: 1
+service:
+  enabled: true
+  port: 5173
+  targetPort: 5173
+probes:
+  enabled: false
+startupChecks:
+  enabled: false
+env:
+  VITE_APP_TITLE: Tazama Connection Studio
+  VITE_APP_ENV: production
