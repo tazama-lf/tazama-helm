@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Central Tazama Helmfile. Helmfile 1.x nested files do not see parent
+# environments unless the child opts in with inherits: environments.
+
+helmDefaults:
+  wait: true
+  atomic: false
+  timeout: 900
+  createNamespace: true
+  cleanupOnFail: true
+
+environments:
+  core:
+    missingFileHandler: Warn
+    values:
+      - values/defaults.yaml
+      - environments/core.yaml
+      - environments/cloud/{{ env "TAZAMA_CLOUD" | default "onprem" }}.yaml
+      - values/secrets.yaml
+  dockerhub:
+    missingFileHandler: Warn
+    values:
+      - values/defaults.yaml
+      - environments/dockerhub.yaml
+      - environments/cloud/{{ env "TAZAMA_CLOUD" | default "onprem" }}.yaml
+      - values/secrets.yaml
+  member:
+    missingFileHandler: Warn
+    values:
+      - values/defaults.yaml
+      - environments/dockerhub.yaml
+      - environments/member.yaml
+      - environments/cloud/{{ env "TAZAMA_CLOUD" | default "onprem" }}.yaml
+      - values/secrets.yaml
+
+---
+# Helmfile 1.x: environments must be a prior document so nested files
+# receive the resolved state. inherits: environments is the v1 way to
+# forward that state (the old toYaml .Values trick is not enough).
+
+helmfiles:
+  - path: datastore/helmfile.yaml.gotmpl
+    inherits:
+      - environments
+      - helmDefaults
+    values:
+      - {{ toYaml .Values | nindent 8 }}
+  - path: auxiliary/helmfile.yaml.gotmpl
+    inherits:
+      - environments
+      - helmDefaults
+    values:
+      - {{ toYaml .Values | nindent 8 }}
+  - path: core/helmfile.yaml.gotmpl
+    inherits:
+      - environments
+      - helmDefaults
+    values:
+      - {{ toYaml .Values | nindent 8 }}
+  - path: rules/helmfile.yaml.gotmpl
+    inherits:
+      - environments
+      - helmDefaults
+    values:
+      - {{ toYaml .Values | nindent 8 }}
+  - path: extensions/helmfile.yaml.gotmpl
+    inherits:
+      - environments
+      - helmDefaults
+    values:
+      - {{ toYaml .Values | nindent 8 }}
+  - path: biar/helmfile.yaml.gotmpl
+    inherits:
+      - environments
+      - helmDefaults
+    values:
+      - {{ toYaml .Values | nindent 8 }}

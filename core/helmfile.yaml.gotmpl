@@ -1,0 +1,442 @@
+# SPDX-License-Identifier: Apache-2.0
+helmDefaults:
+  wait: true
+  atomic: false
+  timeout: 900
+  createNamespace: true
+  cleanupOnFail: true
+
+{{- $ns := .Values.namespace }}
+{{- $pg := .Values.hosts.postgresql }}
+{{- $nats := .Values.hosts.nats }}
+{{- $vk := .Values.hosts.valkey }}
+{{- $kc := .Values.hosts.keycloak }}
+{{- $img := .Values.global.imageRegistry }}
+{{- $tag := .Values.global.tazamaVersion }}
+{{- $pull := .Values.global.imagePullPolicy }}
+{{- $sc := .Values.startupChecks }}
+{{- $relay := .Values.relay | default dict }}
+{{- $authOn := .Values.auth.authenticated | default false }}
+
+{{- $transports := list }}
+{{- if and .Values.install.relay .Values.install.eventFlow }}
+{{- $transports = append $transports (.Values.relay.efrup.transport | default "nats") }}
+{{- end }}
+{{- if and .Values.install.relay .Values.install.typologyProcessor }}
+{{- $transports = append $transports (.Values.relay.tp.transport | default "nats") }}
+{{- end }}
+{{- if and .Values.install.relay .Values.install.eventAdjudicator }}
+{{- $transports = append $transports (.Values.relay.ea.transport | default "nats") }}
+{{- end }}
+{{- $allowed := list "nats" "kafka" "rabbitmq" "rest" }}
+{{- range $t := $transports }}
+{{- if not (has $t $allowed) }}
+{{- fail (printf "relay transport %q is invalid; use nats, kafka, rabbitmq, or rest" $t) }}
+{{- end }}
+{{- end }}
+{{- if has "kafka" $transports }}
+{{- if not .Values.relay.kafka.brokers }}
+{{- fail "relay.kafka.brokers is required when any relay transport is kafka. Helm does not install a Kafka cluster." }}
+{{- end }}
+{{- end }}
+{{- if has "rabbitmq" $transports }}
+{{- if not .Values.relay.rabbitmq.url }}
+{{- fail "relay.rabbitmq.url is required when any relay transport is rabbitmq. Helm does not install a RabbitMQ broker." }}
+{{- end }}
+{{- end }}
+{{- if has "rest" $transports }}
+{{- if not .Values.relay.rest.url }}
+{{- fail "relay.rest.url is required when any relay transport is rest." }}
+{{- end }}
+{{- end }}
+
+releases:
+  - name: tms-service
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: {{ .Values.install.tms }}
+    labels:
+      tier: core
+    values:
+      - ../core/values/tms.yaml
+      - ../core/values/db-passwords.yaml
+      - image:
+          repository: {{ printf "%s/tms-service" $img }}
+          tag: {{ $tag | quote }}
+          pullPolicy: {{ $pull | quote }}
+        hosts:
+          postgresql: {{ $pg | quote }}
+          nats: {{ $nats | quote }}
+          valkey: {{ $vk | quote }}
+        workerOnly: {{ .Values.workerOnly }}
+        startupChecks:
+          enabled: {{ $sc.enabled }}
+          postgresImage: {{ $sc.postgresImage | quote }}
+          busyboxImage: {{ $sc.busyboxImage | quote }}
+          schemaDatabase: {{ $sc.schemaDatabase | quote }}
+          schemaTable: {{ $sc.schemaTable | quote }}
+        env:
+          REDIS_SERVERS: {{ printf "[{\"host\":\"%s\", \"port\":6379}]" $vk | quote }}
+          SERVER_URL: {{ printf "%s:4222" $nats | quote }}
+          RAW_HISTORY_DATABASE_HOST: {{ $pg | quote }}
+          EVENT_HISTORY_DATABASE_HOST: {{ $pg | quote }}
+          AUTHENTICATED: {{ $authOn | quote }}
+          {{- if $authOn }}
+          CERT_PATH_PUBLIC: test-public-key.pem
+          {{- end }}
+        {{- if $authOn }}
+        volumeMounts:
+          - name: auth-keys
+            mountPath: /home/app/test-public-key.pem
+            subPath: public.pem
+            readOnly: true
+        volumes:
+          - name: auth-keys
+            secret:
+              secretName: tazama-auth-keys
+        {{- end }}
+        {{- if .Values.ingress.enabled }}
+        ingress:
+          enabled: true
+          className: {{ .Values.ingress.className | quote }}
+          hosts:
+            - host: {{ printf "tms.%s" .Values.ingress.domain | quote }}
+              path: /
+        {{- end }}
+
+  - name: admin-service
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: {{ .Values.install.admin }}
+    labels:
+      tier: core
+    values:
+      - ../core/values/admin.yaml
+      - ../core/values/db-passwords.yaml
+      - image:
+          repository: {{ printf "%s/admin-service" $img }}
+          tag: {{ $tag | quote }}
+          pullPolicy: {{ $pull | quote }}
+        hosts:
+          postgresql: {{ $pg | quote }}
+          nats: {{ $nats | quote }}
+          valkey: {{ $vk | quote }}
+        workerOnly: {{ .Values.workerOnly }}
+        startupChecks:
+          enabled: {{ $sc.enabled }}
+          postgresImage: {{ $sc.postgresImage | quote }}
+          busyboxImage: {{ $sc.busyboxImage | quote }}
+          schemaDatabase: {{ $sc.schemaDatabase | quote }}
+          schemaTable: {{ $sc.schemaTable | quote }}
+        env:
+          REDIS_SERVERS: {{ printf "[{\"host\":\"%s\", \"port\":6379}]" $vk | quote }}
+          SERVER_URL: {{ printf "%s:4222" $nats | quote }}
+          CONFIGURATION_DATABASE_HOST: {{ $pg | quote }}
+          EVALUATION_DATABASE_HOST: {{ $pg | quote }}
+          EVENT_HISTORY_DATABASE_HOST: {{ $pg | quote }}
+          RAW_HISTORY_DATABASE_HOST: {{ $pg | quote }}
+          AUTHENTICATED: {{ $authOn | quote }}
+          {{- if $authOn }}
+          CERT_PATH_PUBLIC: test-public-key.pem
+          {{- end }}
+        {{- if $authOn }}
+        volumeMounts:
+          - name: auth-keys
+            mountPath: /home/app/test-public-key.pem
+            subPath: public.pem
+            readOnly: true
+        volumes:
+          - name: auth-keys
+            secret:
+              secretName: tazama-auth-keys
+        {{- end }}
+        {{- if .Values.ingress.enabled }}
+        ingress:
+          enabled: true
+          className: {{ .Values.ingress.className | quote }}
+          hosts:
+            - host: {{ printf "admin.%s" .Values.ingress.domain | quote }}
+              path: /
+        {{- end }}
+
+  - name: event-director
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: {{ .Values.install.eventDirector }}
+    labels:
+      tier: core
+    values:
+      - ../core/values/event-director.yaml
+      - ../core/values/db-passwords.yaml
+      - image:
+          repository: {{ printf "%s/event-director" $img }}
+          tag: {{ $tag | quote }}
+          pullPolicy: {{ $pull | quote }}
+        hosts:
+          postgresql: {{ $pg | quote }}
+          nats: {{ $nats | quote }}
+          valkey: {{ $vk | quote }}
+        workerOnly: {{ .Values.workerOnly }}
+        startupChecks:
+          enabled: {{ $sc.enabled }}
+          postgresImage: {{ $sc.postgresImage | quote }}
+          busyboxImage: {{ $sc.busyboxImage | quote }}
+          schemaDatabase: {{ $sc.schemaDatabase | quote }}
+          schemaTable: {{ $sc.schemaTable | quote }}
+        env:
+          REDIS_SERVERS: {{ printf "[{\"host\":\"%s\", \"port\":6379}]" $vk | quote }}
+          SERVER_URL: {{ printf "%s:4222" $nats | quote }}
+          CONFIGURATION_DATABASE_HOST: {{ $pg | quote }}
+
+  - name: event-flow
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: {{ .Values.install.eventFlow }}
+    labels:
+      tier: core
+    values:
+      - ../core/values/event-flow.yaml
+      - ../core/values/db-passwords.yaml
+      - image:
+          repository: {{ printf "%s/event-flow" $img }}
+          tag: {{ $tag | quote }}
+          pullPolicy: {{ $pull | quote }}
+        hosts:
+          postgresql: {{ $pg | quote }}
+          nats: {{ $nats | quote }}
+          valkey: {{ $vk | quote }}
+        workerOnly: {{ .Values.workerOnly }}
+        startupChecks:
+          enabled: {{ $sc.enabled }}
+          postgresImage: {{ $sc.postgresImage | quote }}
+          busyboxImage: {{ $sc.busyboxImage | quote }}
+          schemaDatabase: {{ $sc.schemaDatabase | quote }}
+          schemaTable: {{ $sc.schemaTable | quote }}
+        env:
+          REDIS_SERVERS: {{ printf "[{\"host\":\"%s\", \"port\":6379}]" $vk | quote }}
+          SERVER_URL: {{ printf "%s:4222" $nats | quote }}
+          CONFIGURATION_DATABASE_HOST: {{ $pg | quote }}
+          {{- if .Values.install.relay }}
+          SUPPRESS_ALERTS: "false"
+          INTERDICTION_PRODUCER: interdiction-service-ef
+          {{- end }}
+
+  - name: typology-processor
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: {{ .Values.install.typologyProcessor }}
+    labels:
+      tier: core
+    values:
+      - ../core/values/typology-processor.yaml
+      - ../core/values/db-passwords.yaml
+      - image:
+          repository: {{ printf "%s/typology-processor" $img }}
+          tag: {{ $tag | quote }}
+          pullPolicy: {{ $pull | quote }}
+        hosts:
+          postgresql: {{ $pg | quote }}
+          nats: {{ $nats | quote }}
+          valkey: {{ $vk | quote }}
+        workerOnly: {{ .Values.workerOnly }}
+        startupChecks:
+          enabled: {{ $sc.enabled }}
+          postgresImage: {{ $sc.postgresImage | quote }}
+          busyboxImage: {{ $sc.busyboxImage | quote }}
+          schemaDatabase: {{ $sc.schemaDatabase | quote }}
+          schemaTable: {{ $sc.schemaTable | quote }}
+        env:
+          REDIS_SERVERS: {{ printf "[{\"host\":\"%s\", \"port\":6379}]" $vk | quote }}
+          SERVER_URL: {{ printf "%s:4222" $nats | quote }}
+          CONFIGURATION_DATABASE_HOST: {{ $pg | quote }}
+          {{- if .Values.install.relay }}
+          SUPPRESS_ALERTS: "false"
+          INTERDICTION_PRODUCER: interdiction-service-tp
+          {{- end }}
+
+  - name: event-adjudicator
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: {{ .Values.install.eventAdjudicator }}
+    labels:
+      tier: core
+    values:
+      - ../core/values/event-adjudicator.yaml
+      - ../core/values/db-passwords.yaml
+      - image:
+          repository: {{ printf "%s/event-adjudicator" $img }}
+          tag: {{ $tag | quote }}
+          pullPolicy: {{ $pull | quote }}
+        hosts:
+          postgresql: {{ $pg | quote }}
+          nats: {{ $nats | quote }}
+          valkey: {{ $vk | quote }}
+        workerOnly: {{ .Values.workerOnly }}
+        startupChecks:
+          enabled: {{ $sc.enabled }}
+          postgresImage: {{ $sc.postgresImage | quote }}
+          busyboxImage: {{ $sc.busyboxImage | quote }}
+          schemaDatabase: {{ $sc.schemaDatabase | quote }}
+          schemaTable: {{ $sc.schemaTable | quote }}
+        env:
+          REDIS_SERVERS: {{ printf "[{\"host\":\"%s\", \"port\":6379}]" $vk | quote }}
+          SERVER_URL: {{ printf "%s:4222" $nats | quote }}
+          CONFIGURATION_DATABASE_HOST: {{ $pg | quote }}
+          RAW_HISTORY_DATABASE_HOST: {{ $pg | quote }}
+          EVALUATION_DATABASE_HOST: {{ $pg | quote }}
+          {{- if .Values.install.relay }}
+          SUPPRESS_ALERTS: "false"
+          {{- end }}
+
+  - name: keycloak
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: {{ .Values.install.keycloak }}
+    labels:
+      tier: core
+    values:
+      - ../core/values/keycloak.yaml
+      - image:
+          repository: quay.io/keycloak/keycloak
+          tag: "23.0.6"
+          pullPolicy: {{ $pull | quote }}
+        hosts:
+          postgresql: {{ $pg | quote }}
+        workerOnly: {{ .Values.workerOnly }}
+        startupChecks:
+          enabled: {{ $sc.enabled }}
+          postgres: true
+          valkey: false
+          nats: false
+          postgresImage: {{ $sc.postgresImage | quote }}
+          busyboxImage: {{ $sc.busyboxImage | quote }}
+          schemaDatabase: keycloak
+          schemaTable: pg_database
+        env:
+          KC_HOSTNAME: {{ ternary (printf "keycloak.%s" .Values.ingress.domain) $kc .Values.ingress.enabled | quote }}
+          KC_DB_URL: {{ printf "jdbc:postgresql://%s:5432/keycloak" $pg | quote }}
+          KC_DB_USERNAME: {{ .Values.secrets.postgres.username | quote }}
+        extraEnv:
+          - name: KC_DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: tazama-credentials
+                key: POSTGRES_PASSWORD
+          - name: KEYCLOAK_ADMIN
+            valueFrom:
+              secretKeyRef:
+                name: tazama-credentials
+                key: KEYCLOAK_ADMIN
+          - name: KEYCLOAK_ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: tazama-credentials
+                key: KEYCLOAK_ADMIN_PASSWORD
+        {{- if .Values.ingress.enabled }}
+        ingress:
+          enabled: true
+          className: {{ .Values.ingress.className | quote }}
+          hosts:
+            - host: {{ printf "keycloak.%s" .Values.ingress.domain | quote }}
+              path: /
+        {{- end }}
+
+  - name: auth-service
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: {{ .Values.install.auth }}
+    labels:
+      tier: core
+    {{- if .Values.install.keycloak }}
+    needs:
+      - {{ $ns }}/keycloak
+    {{- end }}
+    values:
+      - ../core/values/auth.yaml
+      - image:
+          repository: {{ printf "%s/auth-service" $img }}
+          tag: {{ $tag | quote }}
+          pullPolicy: {{ $pull | quote }}
+        env:
+          AUTH_URL: {{ printf "http://%s:8080" $kc | quote }}
+        extraEnv:
+          - name: CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: tazama-credentials
+                key: KEYCLOAK_CLIENT_SECRET
+        {{- if .Values.ingress.enabled }}
+        ingress:
+          enabled: true
+          className: {{ .Values.ingress.className | quote }}
+          hosts:
+            - host: {{ printf "auth.%s" .Values.ingress.domain | quote }}
+              path: /
+        {{- end }}
+
+{{- $plugins := dict "nats" "@tazama-lf/nats-relay-plugin" "kafka" "@tazama-lf/kafka-relay-plugin" "rabbitmq" "@tazama-lf/rabbitmq-relay-plugin" "rest" "@tazama-lf/rest-relay-plugin" }}
+{{- $relaySvcs := list
+  (dict "release" "relay-service-ef" "key" "efrup" "consumer" "interdiction-service-ef" "short" "ef" "flag" "eventFlow")
+  (dict "release" "relay-service-tp" "key" "tp" "consumer" "interdiction-service-tp" "short" "tp" "flag" "typologyProcessor")
+  (dict "release" "relay-service-ea" "key" "ea" "consumer" "investigation-service" "short" "ea" "flag" "eventAdjudicator")
+}}
+{{- range $svc := $relaySvcs }}
+{{- $spec := index $relay $svc.key | default dict }}
+{{- $transport := $spec.transport | default "nats" }}
+{{- $plugin := index $plugins $transport }}
+{{- $destUrl := printf "%s:4222" $nats }}
+{{- if eq $transport "kafka" }}
+{{- $destUrl = $relay.kafka.brokers }}
+{{- else if eq $transport "rabbitmq" }}
+{{- $destUrl = $relay.rabbitmq.url }}
+{{- else if eq $transport "rest" }}
+{{- $destUrl = $relay.rest.url }}
+{{- end }}
+{{- $installed := and $.Values.install.relay (index $.Values.install $svc.flag) }}
+
+  - name: {{ $svc.release }}
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: {{ $installed }}
+    labels:
+      tier: core
+    values:
+      - ../core/values/relay.yaml
+      - name: {{ $svc.release }}
+        fullnameOverride: {{ $svc.release }}
+        image:
+          repository: {{ printf "%s/relay-service-integration-%s" $img $transport }}
+          tag: {{ $tag | quote }}
+          pullPolicy: {{ $pull | quote }}
+        hosts:
+          nats: {{ $nats | quote }}
+        workerOnly: {{ $.Values.workerOnly }}
+        startupChecks:
+          enabled: {{ $sc.enabled }}
+          postgres: false
+          valkey: false
+          nats: true
+          postgresImage: {{ $sc.postgresImage | quote }}
+          busyboxImage: {{ $sc.busyboxImage | quote }}
+        env:
+          FUNCTION_NAME: {{ $svc.release | quote }}
+          APM_SERVICE_NAME: {{ $svc.release | quote }}
+          SERVER_URL: {{ printf "%s:4222" $nats | quote }}
+          CONSUMER_STREAM: {{ $svc.consumer | quote }}
+          PRODUCER_STREAM: {{ printf "relay-service-%s-%s" $transport $svc.short | quote }}
+          DESTINATION_TRANSPORT_TYPE: {{ $plugin | quote }}
+          DESTINATION_TRANSPORT_URL: {{ $destUrl | quote }}
+          OUTPUT_TO_JSON: {{ ternary "true" "false" (ne $transport "nats") | quote }}
+          {{- if eq $transport "rest" }}
+          RETRY_ATTEMPTS: "10"
+          MAX_SOCKETS: "10"
+          AUTH_HEALTH_URL: {{ printf "http://%s:8080/health" $kc | quote }}
+          AUTH_TOKEN_URL: {{ printf "http://%s:8080" $kc | quote }}
+          {{- if $relay.rest.authUsername }}
+          AUTH_USERNAME: {{ $relay.rest.authUsername | quote }}
+          {{- end }}
+          {{- if $relay.rest.authPassword }}
+          AUTH_PASSWORD: {{ $relay.rest.authPassword | quote }}
+          {{- end }}
+          {{- end }}
+{{- end }}

@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# Local or on-prem cluster (k3d, kind, kubeadm, RKE2, OpenShift-compatible).
+# Empty storageClass uses the cluster default (local-path, longhorn, nfs, etc).
+
+cloud: onprem
+storageClass: ""
+workerOnly: false
+
+install:
+  ingressNginx: false
+
+ingress:
+  enabled: false
+  className: nginx
+  domain: tazama.local
+
+ingressNginx:
+  serviceType: LoadBalancer
+  serviceAnnotations: {}
+
+valkey:
+  replicaEnabled: false

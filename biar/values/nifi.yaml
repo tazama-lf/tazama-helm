@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+name: nifi
+fullnameOverride: nifi
+kind: StatefulSet
+replicaCount: 1
+image:
+  repository: apache/nifi
+  tag: "1.24.0"
+service:
+  enabled: true
+  port: 8080
+  targetPort: 8080
+probes:
+  enabled: false
+startupChecks:
+  enabled: false
+persistence:
+  enabled: true
+  size: 20Gi
+  mountPath: /opt/nifi/nifi-current/state
+env:
+  NIFI_WEB_HTTP_PORT: "8080"
+  # JDBC host is the Postgres replica (hosts.postgresqlReplica), not the primary.

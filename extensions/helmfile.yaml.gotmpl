@@ -1,0 +1,286 @@
+# SPDX-License-Identifier: Apache-2.0
+helmDefaults:
+  wait: true
+  atomic: false
+  timeout: 900
+  createNamespace: true
+  cleanupOnFail: true
+
+{{- $ns := .Values.namespace }}
+{{- $pg := .Values.hosts.postgresql }}
+{{- $nats := .Values.hosts.nats }}
+{{- $vk := .Values.hosts.valkey }}
+{{- $img := .Values.global.imageRegistry }}
+{{- $tag := .Values.global.tazamaVersion }}
+{{- $pull := .Values.global.imagePullPolicy }}
+{{- $sc := .Values.startupChecks }}
+
+repositories:
+  - name: opensearch
+    url: https://opensearch-project.github.io/helm-charts/
+
+releases:
+  - name: opensearch
+    namespace: {{ $ns }}
+    chart: opensearch/opensearch
+    version: 2.26.0
+    installed: {{ .Values.install.opensearch }}
+    labels:
+      tier: extensions
+    values:
+      - ../extensions/values/opensearch.yaml
+      - persistence:
+          {{- if .Values.storageClass }}
+          storageClass: {{ .Values.storageClass | quote }}
+          {{- end }}
+
+  - name: couchdb
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: {{ .Values.install.couchdb }}
+    labels:
+      tier: extensions
+    values:
+      - ../extensions/values/couchdb.yaml
+      - persistence:
+          storageClass: {{ .Values.storageClass | quote }}
+
+  - name: flowable
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: {{ .Values.install.flowable }}
+    labels:
+      tier: extensions
+    values:
+      - ../extensions/values/flowable.yaml
+      - ../core/values/db-passwords.yaml
+      - hosts:
+          postgresql: {{ $pg | quote }}
+        env:
+          SPRING_DATASOURCE_URL: {{ printf "jdbc:postgresql://%s:5432/flowable" $pg | quote }}
+
+  - name: connection-studio-backend
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: {{ .Values.install.connectionStudio }}
+    labels:
+      tier: extensions
+    values:
+      - ../extensions/values/connection-studio-backend.yaml
+      - ../core/values/db-passwords.yaml
+      - image:
+          repository: {{ printf "%s/connection-studio-backend" $img }}
+          tag: {{ $tag | quote }}
+          pullPolicy: {{ $pull | quote }}
+        hosts:
+          postgresql: {{ $pg | quote }}
+          nats: {{ $nats | quote }}
+          valkey: {{ $vk | quote }}
+        workerOnly: {{ .Values.workerOnly }}
+        startupChecks:
+          enabled: {{ $sc.enabled }}
+          postgresImage: {{ $sc.postgresImage | quote }}
+          busyboxImage: {{ $sc.busyboxImage | quote }}
+          schemaDatabase: {{ $sc.schemaDatabase | quote }}
+          schemaTable: {{ $sc.schemaTable | quote }}
+        env:
+          POSTGRES_HOST: {{ $pg | quote }}
+          SERVER_URL: {{ printf "nats://%s:4222" $nats | quote }}
+          CONFIGURATION_DATABASE_URL: {{ printf "postgresql://%s@%s:5432/configuration" .Values.secrets.postgres.username $pg | quote }}
+          ADMIN_SERVICE_URL: http://admin-service:5100
+        {{- if .Values.ingress.enabled }}
+        ingress:
+          enabled: true
+          className: {{ .Values.ingress.className | quote }}
+          hosts:
+            - host: {{ printf "tcs-api.%s" .Values.ingress.domain | quote }}
+              path: /
+        {{- end }}
+
+  - name: connection-studio-frontend
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: {{ .Values.install.connectionStudio }}
+    labels:
+      tier: extensions
+    values:
+      - ../extensions/values/connection-studio-frontend.yaml
+      - image:
+          repository: {{ printf "%s/connection-studio-frontend" $img }}
+          tag: {{ $tag | quote }}
+          pullPolicy: {{ $pull | quote }}
+        env:
+          VITE_API_BASE_URL: {{ printf "http://connection-studio-backend:3010" | quote }}
+        {{- if .Values.ingress.enabled }}
+        ingress:
+          enabled: true
+          className: {{ .Values.ingress.className | quote }}
+          hosts:
+            - host: {{ printf "tcs.%s" .Values.ingress.domain | quote }}
+              path: /
+        {{- end }}
+
+  - name: rule-studio-backend
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: {{ .Values.install.ruleStudio }}
+    labels:
+      tier: extensions
+    values:
+      - ../extensions/values/rule-studio-backend.yaml
+      - image:
+          repository: {{ printf "%s/rule-studio-backend" $img }}
+          tag: {{ $tag | quote }}
+          pullPolicy: {{ $pull | quote }}
+        env:
+          ADMIN_SERVICE_URL: http://admin-service:5100
+        {{- if .Values.ingress.enabled }}
+        ingress:
+          enabled: true
+          className: {{ .Values.ingress.className | quote }}
+          hosts:
+            - host: {{ printf "trs-api.%s" .Values.ingress.domain | quote }}
+              path: /
+        {{- end }}
+
+  - name: rule-studio-frontend
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: {{ .Values.install.ruleStudio }}
+    labels:
+      tier: extensions
+    values:
+      - ../extensions/values/rule-studio-frontend.yaml
+      - image:
+          repository: {{ printf "%s/rule-studio-frontend" $img }}
+          tag: {{ $tag | quote }}
+          pullPolicy: {{ $pull | quote }}
+        {{- if .Values.ingress.enabled }}
+        ingress:
+          enabled: true
+          className: {{ .Values.ingress.className | quote }}
+          hosts:
+            - host: {{ printf "trs.%s" .Values.ingress.domain | quote }}
+              path: /
+        {{- end }}
+
+  - name: cms-backend
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: {{ .Values.install.cms }}
+    labels:
+      tier: extensions
+    values:
+      - ../extensions/values/cms-backend.yaml
+      - ../core/values/db-passwords.yaml
+      - image:
+          repository: {{ printf "%s/case-management-system-backend" $img }}
+          tag: {{ $tag | quote }}
+          pullPolicy: {{ $pull | quote }}
+        hosts:
+          postgresql: {{ $pg | quote }}
+          nats: {{ $nats | quote }}
+          valkey: {{ $vk | quote }}
+        workerOnly: {{ .Values.workerOnly }}
+        startupChecks:
+          enabled: {{ $sc.enabled }}
+          postgresImage: {{ $sc.postgresImage | quote }}
+          busyboxImage: {{ $sc.busyboxImage | quote }}
+          schemaDatabase: {{ $sc.schemaDatabase | quote }}
+          schemaTable: {{ $sc.schemaTable | quote }}
+        env:
+          POSTGRES_HOST: {{ $pg | quote }}
+          REDIS_HOST: {{ $vk | quote }}
+          SERVER_URL: {{ printf "nats://%s:4222" $nats | quote }}
+          DATABASE_URL: {{ printf "postgresql://%s@%s:5432/tazama_cms" .Values.secrets.postgres.username $pg | quote }}
+          FLOWABLE_URL: http://flowable:8080/flowable-rest
+          COUCHDB_URL: http://couchdb:5984
+          OPENSEARCH_NODE: http://opensearch:9200
+        {{- if .Values.ingress.enabled }}
+        ingress:
+          enabled: true
+          className: {{ .Values.ingress.className | quote }}
+          hosts:
+            - host: {{ printf "cms-api.%s" .Values.ingress.domain | quote }}
+              path: /
+        {{- end }}
+
+  - name: cms-frontend
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: {{ .Values.install.cms }}
+    labels:
+      tier: extensions
+    values:
+      - ../extensions/values/cms-frontend.yaml
+      - image:
+          repository: {{ printf "%s/case-management-system-frontend" $img }}
+          tag: {{ $tag | quote }}
+          pullPolicy: {{ $pull | quote }}
+        {{- if .Values.ingress.enabled }}
+        ingress:
+          enabled: true
+          className: {{ .Values.ingress.className | quote }}
+          hosts:
+            - host: {{ printf "cms.%s" .Values.ingress.domain | quote }}
+              path: /
+        {{- end }}
+
+  - name: deapi
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: {{ .Values.install.deapi }}
+    labels:
+      tier: extensions
+    values:
+      - ../extensions/values/deapi.yaml
+      - ../core/values/db-passwords.yaml
+      - image:
+          repository: {{ printf "%s/data-enrichment-service" $img }}
+          tag: {{ $tag | quote }}
+          pullPolicy: {{ $pull | quote }}
+        hosts:
+          postgresql: {{ $pg | quote }}
+          nats: {{ $nats | quote }}
+          valkey: {{ $vk | quote }}
+        workerOnly: {{ .Values.workerOnly }}
+        startupChecks:
+          enabled: {{ $sc.enabled }}
+          postgresImage: {{ $sc.postgresImage | quote }}
+          busyboxImage: {{ $sc.busyboxImage | quote }}
+          schemaDatabase: {{ $sc.schemaDatabase | quote }}
+          schemaTable: {{ $sc.schemaTable | quote }}
+        env:
+          POSTGRES_CONTAINER_NAME: {{ $pg | quote }}
+          DB_HOST: {{ $pg | quote }}
+          REDIS_HOST: {{ $vk | quote }}
+          SERVER_URL: {{ printf "nats://%s:4222" $nats | quote }}
+
+  - name: dems
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: {{ .Values.install.dems }}
+    labels:
+      tier: extensions
+    values:
+      - ../extensions/values/dems.yaml
+      - ../core/values/db-passwords.yaml
+      - image:
+          repository: {{ printf "%s/event-monitoring-service" $img }}
+          tag: {{ $tag | quote }}
+          pullPolicy: {{ $pull | quote }}
+        hosts:
+          postgresql: {{ $pg | quote }}
+          nats: {{ $nats | quote }}
+          valkey: {{ $vk | quote }}
+        workerOnly: {{ .Values.workerOnly }}
+        startupChecks:
+          enabled: {{ $sc.enabled }}
+          postgresImage: {{ $sc.postgresImage | quote }}
+          busyboxImage: {{ $sc.busyboxImage | quote }}
+          schemaDatabase: {{ $sc.schemaDatabase | quote }}
+          schemaTable: {{ $sc.schemaTable | quote }}
+        env:
+          DB_HOST: {{ $pg | quote }}
+          REDIS_HOST: {{ $vk | quote }}
+          SERVER_URL: {{ printf "nats://%s:4222" $nats | quote }}

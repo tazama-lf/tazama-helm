@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: Apache-2.0
+helmDefaults:
+  wait: true
+  atomic: false
+  timeout: 900
+  createNamespace: true
+  cleanupOnFail: true
+
+{{- if .Values.install.biar }}
+{{- $repHost := .Values.hosts.postgresqlReplica | default "" }}
+{{- if and (not .Values.install.postgresqlReplica) (or (eq $repHost "") (eq $repHost "postgresql-replica")) }}
+{{- fail "BIAR requires a Postgres replica so NiFi does not hit the primary. Set install.postgresqlReplica: true for an in-cluster streaming replica, or set hosts.postgresqlReplica to a managed replica endpoint (RDS / Cloud SQL / Azure Database)." }}
+{{- end }}
+{{- end }}
+
+releases:
+  - name: nifi
+    namespace: {{ .Values.namespace }}
+    chart: ../charts/tazama-workload
+    installed: {{ .Values.install.biar }}
+    labels:
+      tier: biar
+    values:
+      - ../biar/values/nifi.yaml
+      - persistence:
+          storageClass: {{ .Values.storageClass | quote }}
+        env:
+          POSTGRES_HOST: {{ .Values.hosts.postgresqlReplica | quote }}
+          POSTGRES_PORT: "5432"
+          POSTGRES_JDBC_PREFIX: {{ printf "jdbc:postgresql://%s:5432" .Values.hosts.postgresqlReplica | quote }}
+        {{- if .Values.ingress.enabled }}
+        ingress:
+          enabled: true
+          className: {{ .Values.ingress.className | quote }}
+          hosts:
+            - host: {{ printf "nifi.%s" .Values.ingress.domain | quote }}
+              path: /
+        {{- end }}

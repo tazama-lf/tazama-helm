@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.fullnameOverride | default "tazama-postgres-init" }}
+  labels:
+    app.kubernetes.io/name: tazama-files
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: tazama
+data:
+{{ (.Files.Glob "sql/*.sql").AsConfig | indent 2 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-realm
+  labels:
+    app.kubernetes.io/name: tazama-files
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: tazama
+data:
+{{ (.Files.Glob "keycloak/*.json").AsConfig | indent 2 }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.credentialsSecretName }}
+  labels:
+    app.kubernetes.io/name: tazama-files
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: tazama
+type: Opaque
+stringData:
+  POSTGRES_USER: {{ .Values.postgres.username | quote }}
+  POSTGRES_PASSWORD: {{ .Values.postgres.password | quote }}
+  POSTGRES_REPLICATION_PASSWORD: {{ .Values.postgres.replicationPassword | default .Values.postgres.password | quote }}
+  VALKEY_PASSWORD: {{ .Values.valkey.password | quote }}
+  REDIS_AUTH: {{ .Values.valkey.password | quote }}
+  KEYCLOAK_ADMIN: {{ .Values.keycloak.adminUser | quote }}
+  KEYCLOAK_ADMIN_PASSWORD: {{ .Values.keycloak.adminPassword | quote }}
+  KEYCLOAK_CLIENT_SECRET: {{ .Values.keycloak.clientSecret | quote }}
+{{- if and .Values.auth.privateKey .Values.auth.publicKey }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tazama-auth-keys
+  labels:
+    app.kubernetes.io/name: tazama-files
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: tazama
+type: Opaque
+stringData:
+  public.pem: |
+{{ .Values.auth.publicKey | nindent 4 }}
+  private.pem: |
+{{ .Values.auth.privateKey | nindent 4 }}
+{{- end }}
+{{- if .Values.createPullSecret }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.pullSecretName }}
+  labels:
+    app.kubernetes.io/name: tazama-files
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: tazama
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: {{ printf "{\"auths\":{\"%s\":{\"username\":\"%s\",\"password\":\"%s\",\"email\":\"%s\",\"auth\":\"%s\"}}}" .Values.dockerServer .Values.dockerUsername .Values.dockerPassword .Values.dockerEmail (printf "%s:%s" .Values.dockerUsername .Values.dockerPassword | b64enc) | b64enc }}
+{{- end }}

@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: Apache-2.0
+name: cms-backend
+fullnameOverride: cms-backend
+replicaCount: 1
+service:
+  enabled: true
+  port: 3090
+  targetPort: 3090
+probes:
+  enabled: true
+  path: /
+  port: http
+startupChecks:
+  postgres: true
+  valkey: true
+  nats: true
+env:
+  FUNCTION_NAME: case-management-service
+  NODE_ENV: dev
+  MAX_CPU: "1"
+  PORT: "3090"
+  POSTGRES_DB: tazama_cms
+  POSTGRES_USER: postgres
+  POSTGRES_PORT: "5432"
+  TRIAGE_TYPE: MANUAL
+  AUTHENTICATED: "false"
+  STARTUP_TYPE: nats
+  CONSUMER_STREAM: investigation-service
+  PRODUCER_STREAM: default
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"

@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: Apache-2.0
+helmDefaults:
+  wait: true
+  atomic: false
+  timeout: 900
+  createNamespace: true
+  cleanupOnFail: true
+
+{{- $ns := .Values.namespace }}
+{{- $pg := .Values.hosts.postgresql }}
+{{- $nats := .Values.hosts.nats }}
+{{- $vk := .Values.hosts.valkey }}
+{{- $tag := .Values.global.tazamaVersion }}
+{{- $pull := .Values.global.imagePullPolicy }}
+{{- $rel := .Values.global.ruleRel }}
+{{- $sc := .Values.startupChecks }}
+{{- $reg := .Values.rules.imageRegistry | default .Values.global.imageRegistry }}
+
+releases:
+{{- if and .Values.install.rules .Values.rules.enabled }}
+{{- range $id := .Values.rules.enabled }}
+  - name: rule-{{ $id }}
+    namespace: {{ $ns }}
+    chart: ../charts/tazama-workload
+    installed: true
+    labels:
+      tier: rules
+    values:
+      - ../core/values/db-passwords.yaml
+      - name: rule-{{ $id }}
+        fullnameOverride: rule-{{ $id }}
+        replicaCount: 1
+        service:
+          enabled: false
+        probes:
+          enabled: false
+        image:
+          repository: {{ printf "%s/rule-%s" $reg $id }}
+          tag: {{ $tag | quote }}
+          pullPolicy: {{ $pull | quote }}
+        hosts:
+          postgresql: {{ $pg | quote }}
+          nats: {{ $nats | quote }}
+          valkey: {{ $vk | quote }}
+        workerOnly: {{ $.Values.workerOnly }}
+        startupChecks:
+          enabled: {{ $sc.enabled }}
+          postgres: true
+          valkey: true
+          nats: true
+          postgresImage: {{ $sc.postgresImage | quote }}
+          busyboxImage: {{ $sc.busyboxImage | quote }}
+          schemaDatabase: {{ $sc.schemaDatabase | quote }}
+          schemaTable: {{ $sc.schemaTable | quote }}
+        env:
+          FUNCTION_NAME: {{ printf "rule-%s-rel-%s" $id $rel | quote }}
+          RULE_VERSION: "4.0.0"
+          RULE_NAME: {{ $id | quote }}
+          NODE_ENV: dev
+          MAX_CPU: "1"
+          SUPPRESS_ALERTS: "true"
+          APM_ACTIVE: "false"
+          APM_SERVICE_NAME: {{ printf "rule-%s" $id | quote }}
+          LOCAL_CACHETTL: "300"
+          LOCAL_CACHE_ENABLED: "true"
+          RAW_HISTORY_DATABASE: raw_history
+          RAW_HISTORY_DATABASE_HOST: {{ $pg | quote }}
+          RAW_HISTORY_DATABASE_USER: {{ $.Values.secrets.postgres.username | quote }}
+          CONFIGURATION_DATABASE: configuration
+          CONFIGURATION_DATABASE_HOST: {{ $pg | quote }}
+          CONFIGURATION_DATABASE_USER: {{ $.Values.secrets.postgres.username | quote }}
+          EVENT_HISTORY_DATABASE: event_history
+          EVENT_HISTORY_DATABASE_HOST: {{ $pg | quote }}
+          EVENT_HISTORY_DATABASE_USER: {{ $.Values.secrets.postgres.username | quote }}
+          LOG_LEVEL: info
+          STARTUP_TYPE: nats
+          SERVER_URL: {{ printf "%s:4222" $nats | quote }}
+          REDIS_SERVERS: {{ printf "[{\"host\":\"%s\", \"port\":6379}]" $vk | quote }}
+          REDIS_IS_CLUSTER: "false"
+{{- end }}
+{{- else }}
+  []
+{{- end }}

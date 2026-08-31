@@ -1,0 +1,144 @@
+# SPDX-License-Identifier: Apache-2.0
+helmDefaults:
+  wait: true
+  atomic: false
+  timeout: 900
+  createNamespace: true
+  cleanupOnFail: true
+
+repositories:
+  - name: postgresql
+    url: https://groundhog2k.github.io/helm-charts/
+
+{{- if and .Values.install.postgresqlReplica (not .Values.install.postgresql) }}
+{{- fail "install.postgresqlReplica requires install.postgresql (in-cluster primary). For managed Postgres set hosts.postgresqlReplica to the replica endpoint and install.postgresqlReplica: false." }}
+{{- end }}
+
+releases:
+  - name: tazama-files
+    namespace: {{ .Values.namespace }}
+    chart: ../charts/tazama-files
+    installed: {{ .Values.install.postgresql }}
+    labels:
+      tier: datastore
+    values:
+      - fullnameOverride: tazama-postgres-init
+        credentialsSecretName: tazama-credentials
+        postgres:
+          username: {{ .Values.secrets.postgres.username | quote }}
+          password: {{ .Values.secrets.postgres.password | quote }}
+          replicationPassword: {{ .Values.secrets.postgres.replicationPassword | default .Values.secrets.postgres.password | quote }}
+        valkey:
+          password: {{ .Values.secrets.valkey.password | quote }}
+        keycloak:
+          adminUser: {{ .Values.secrets.keycloak.adminUser | quote }}
+          adminPassword: {{ .Values.secrets.keycloak.adminPassword | quote }}
+          clientSecret: {{ .Values.secrets.keycloak.clientSecret | quote }}
+        auth:
+          publicKey: {{ .Values.secrets.auth.publicKey | quote }}
+          privateKey: {{ .Values.secrets.auth.privateKey | quote }}
+        createPullSecret: {{ .Values.secrets.dockerHub.createPullSecret | default false }}
+        pullSecretName: frmpullsecret
+        dockerServer: https://index.docker.io/v1/
+        dockerUsername: {{ .Values.secrets.dockerHub.username | quote }}
+        dockerPassword: {{ .Values.secrets.dockerHub.password | quote }}
+        dockerEmail: {{ .Values.secrets.dockerHub.email | quote }}
+
+  - name: postgresql
+    namespace: {{ .Values.namespace }}
+    chart: postgresql/postgres
+    version: 1.6.7
+    installed: {{ .Values.install.postgresql }}
+    needs:
+      - {{ .Values.namespace }}/tazama-files
+    labels:
+      tier: datastore
+    values:
+      - ../datastore/values/postgresql.yaml
+      - fullnameOverride: postgresql
+        settings:
+          superuser:
+            value: {{ .Values.secrets.postgres.username | quote }}
+          superuserPassword:
+            value: {{ .Values.secrets.postgres.password | quote }}
+        storage:
+          requestedSize: {{ .Values.postgres.persistenceSize | quote }}
+          className: {{ .Values.storageClass | quote }}
+        extraScripts: tazama-postgres-init
+        customScripts:
+          20-replication.sh: |
+            #!/bin/bash
+            set -euo pipefail
+            psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
+            DO $$
+            BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'replicator') THEN
+                CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD '{{ .Values.secrets.postgres.replicationPassword | default .Values.secrets.postgres.password }}';
+              END IF;
+            END
+            $$;
+            EOSQL
+            if ! grep -q "replication replicator" "$PGDATA/pg_hba.conf"; then
+              echo "host replication replicator all scram-sha-256" >> "$PGDATA/pg_hba.conf"
+            fi
+
+  - name: postgresql-replica
+    namespace: {{ .Values.namespace }}
+    chart: postgresql/postgres
+    version: 1.6.7
+    installed: {{ and .Values.install.postgresql .Values.install.postgresqlReplica }}
+    needs:
+      - {{ .Values.namespace }}/postgresql
+    labels:
+      tier: datastore
+    values:
+      - ../datastore/values/postgresql-replica.yaml
+      - fullnameOverride: postgresql-replica
+        settings:
+          superuser:
+            value: {{ .Values.secrets.postgres.username | quote }}
+          superuserPassword:
+            value: {{ .Values.secrets.postgres.password | quote }}
+        storage:
+          requestedSize: {{ .Values.postgres.replicaPersistenceSize | default .Values.postgres.persistenceSize | quote }}
+          className: {{ .Values.storageClass | quote }}
+        extraInitContainers:
+          - name: replica-basebackup
+            image: {{ printf "postgres:%s" (.Values.postgres.imageTag | default "18") | quote }}
+            imagePullPolicy: IfNotPresent
+            securityContext:
+              allowPrivilegeEscalation: false
+              runAsNonRoot: true
+              runAsUser: 999
+              runAsGroup: 999
+              capabilities:
+                drop:
+                  - ALL
+            env:
+              - name: PGPASSWORD
+                value: {{ .Values.secrets.postgres.replicationPassword | default .Values.secrets.postgres.password | quote }}
+              - name: PRIMARY_HOST
+                value: postgresql
+            command:
+              - bash
+              - -c
+              - |
+                set -euo pipefail
+                PGDATA="/var/lib/postgresql/data/pg"
+                if [ -s "$PGDATA/PG_VERSION" ]; then
+                  echo "replica already initialized"
+                  exit 0
+                fi
+                until pg_isready -h "$PRIMARY_HOST" -p 5432 -d postgres; do
+                  echo "waiting for primary $PRIMARY_HOST"
+                  sleep 3
+                done
+                mkdir -p /var/lib/postgresql/data
+                rm -rf "$PGDATA"
+                until pg_basebackup -h "$PRIMARY_HOST" -p 5432 -U replicator -D "$PGDATA" -Fp -Xs -P -R; do
+                  echo "waiting for replication role on primary"
+                  sleep 5
+                done
+            volumeMounts:
+              - name: postgres-data
+                mountPath: /var/lib/postgresql/data

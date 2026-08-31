@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+singleNode: true
+replicas: 1
+persistence:
+  enabled: true
+  size: 20Gi
+  enableInitChown: true
+extraEnvs:
+  - name: DISABLE_SECURITY_PLUGIN
+    value: "true"
+  - name: DISABLE_INSTALL_DEMO_CONFIG
+    value: "true"
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: "1"
+    memory: 2Gi

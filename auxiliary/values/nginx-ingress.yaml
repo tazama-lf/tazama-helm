@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+controller:
+  replicaCount: 1
+  ingressClassResource:
+    name: nginx
+    enabled: true
+    default: false
+  ingressClass: nginx
+  service:
+    type: LoadBalancer
+    annotations: {}
+  publishService:
+    enabled: true

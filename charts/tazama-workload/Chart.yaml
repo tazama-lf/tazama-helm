@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v2
+name: tazama-workload
+description: Generic Deployment or StatefulSet chart for Tazama processors, rules, studios, and supporting apps.
+type: application
+version: 0.1.0
+appVersion: "4.0.0"

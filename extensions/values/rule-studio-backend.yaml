@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+name: rule-studio-backend
+fullnameOverride: rule-studio-backend
+replicaCount: 1
+service:
+  enabled: true
+  port: 3005
+  targetPort: 3005
+probes:
+  enabled: true
+  path: /
+  port: http
+startupChecks:
+  postgres: false
+  valkey: false
+  nats: false
+env:
+  FUNCTION_NAME: model-management-backend
+  NODE_ENV: dev
+  MAX_CPU: "2"
+  PORT: "3005"
+  AUTHENTICATED: "false"
+  VITE_APP_NAME: Model Management

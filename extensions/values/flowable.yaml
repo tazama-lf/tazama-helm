@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+name: flowable
+fullnameOverride: flowable
+replicaCount: 1
+image:
+  repository: flowable/flowable-rest
+  tag: latest
+service:
+  enabled: true
+  port: 8080
+  targetPort: 8080
+probes:
+  enabled: false
+startupChecks:
+  postgres: true
+  valkey: false
+  nats: false
+env:
+  SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
+  SPRING_DATASOURCE_USERNAME: postgres

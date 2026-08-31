@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: Apache-2.0
+helmDefaults:
+  wait: true
+  atomic: false
+  timeout: 900
+  createNamespace: true
+  cleanupOnFail: true
+
+repositories:
+  - name: nats
+    url: https://nats-io.github.io/k8s/helm/charts/
+  - name: valkey
+    url: https://valkey.io/valkey-helm
+  - name: ingress-nginx
+    url: https://kubernetes.github.io/ingress-nginx
+
+releases:
+  - name: nats
+    namespace: {{ .Values.namespace }}
+    chart: nats/nats
+    version: 2.14.4
+    installed: {{ .Values.install.nats }}
+    labels:
+      tier: auxiliary
+    values:
+      - ../auxiliary/values/nats.yaml
+      - config:
+          jetstream:
+            fileStore:
+              pvc:
+                size: {{ .Values.nats.jetstreamSize | quote }}
+                {{- if .Values.storageClass }}
+                storageClassName: {{ .Values.storageClass | quote }}
+                {{- end }}
+
+  - name: valkey
+    namespace: {{ .Values.namespace }}
+    chart: valkey/valkey
+    version: 0.11.0
+    installed: {{ .Values.install.valkey }}
+    labels:
+      tier: auxiliary
+    values:
+      - ../auxiliary/values/valkey.yaml
+      - auth:
+          enabled: {{ .Values.valkey.auth }}
+          {{- if .Values.valkey.auth }}
+          aclUsers:
+            default:
+              permissions: "~* &* +@all"
+              password: {{ .Values.secrets.valkey.password | quote }}
+          {{- end }}
+        replica:
+          enabled: {{ .Values.valkey.replicaEnabled }}
+          replicas: {{ .Values.valkey.replicas }}
+        dataStorage:
+          enabled: true
+          requestedSize: {{ .Values.valkey.persistenceSize | quote }}
+          {{- if .Values.storageClass }}
+          className: {{ .Values.storageClass | quote }}
+          {{- end }}
+
+  - name: ingress-nginx
+    namespace: ingress-nginx
+    chart: ingress-nginx/ingress-nginx
+    version: 4.11.2
+    createNamespace: true
+    installed: {{ .Values.install.ingressNginx }}
+    labels:
+      tier: auxiliary
+    values:
+      - ../auxiliary/values/nginx-ingress.yaml
+      - controller:
+          replicaCount: {{ .Values.ingressNginx.replicaCount }}
+          service:
+            type: {{ .Values.ingressNginx.serviceType | quote }}
+            annotations:
+              {{- toYaml .Values.ingressNginx.serviceAnnotations | nindent 14 }}
