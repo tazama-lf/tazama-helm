@@ -6,6 +6,15 @@ helmDefaults:
   createNamespace: true
   cleanupOnFail: true
 
+{{- $ing := .Values.ingress | default dict }}
+{{- $ingNginx := $ing.nginx | default dict }}
+{{- $vkPass := .Values.secrets.valkey.password | default "" }}
+{{- $vkAuth := or .Values.valkey.auth (ne $vkPass "") }}
+{{- $nginx := .Values.ingressNginx | default dict }}
+{{- $nginxReplicas := $nginx.replicaCount | default ($ingNginx.replicaCount | default 1) }}
+{{- $nginxType := $nginx.serviceType | default ($ingNginx.serviceType | default "NodePort") }}
+{{- $nginxAnns := $nginx.serviceAnnotations | default dict }}
+
 repositories:
   - name: nats
     url: https://nats-io.github.io/k8s/helm/charts/
@@ -43,16 +52,24 @@ releases:
     values:
       - ../auxiliary/values/valkey.yaml
       - auth:
-          enabled: {{ .Values.valkey.auth }}
-          {{- if .Values.valkey.auth }}
+          enabled: {{ $vkAuth }}
+          {{- if $vkAuth }}
           aclUsers:
             default:
               permissions: "~* &* +@all"
-              password: {{ .Values.secrets.valkey.password | quote }}
+              password: {{ $vkPass | quote }}
           {{- end }}
         replica:
           enabled: {{ .Values.valkey.replicaEnabled }}
           replicas: {{ .Values.valkey.replicas }}
+          {{- if .Values.valkey.replicaEnabled }}
+          # The chart refuses to render replica mode without a PVC size.
+          persistence:
+            size: {{ .Values.valkey.persistenceSize | quote }}
+            {{- if .Values.storageClass }}
+            storageClass: {{ .Values.storageClass | quote }}
+            {{- end }}
+          {{- end }}
         dataStorage:
           enabled: true
           requestedSize: {{ .Values.valkey.persistenceSize | quote }}
@@ -71,8 +88,9 @@ releases:
     values:
       - ../auxiliary/values/nginx-ingress.yaml
       - controller:
-          replicaCount: {{ .Values.ingressNginx.replicaCount }}
+          replicaCount: {{ $nginxReplicas }}
           service:
-            type: {{ .Values.ingressNginx.serviceType | quote }}
+            type: {{ $nginxType | quote }}
             annotations:
-              {{- toYaml .Values.ingressNginx.serviceAnnotations | nindent 14 }}
+              {{- toYaml $nginxAnns | nindent 14 }}
+

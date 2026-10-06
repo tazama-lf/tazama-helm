@@ -15,6 +15,8 @@ storage:
     - ReadWriteOnce
   className: ""
 extraScripts: tazama-postgres-init
+# Helmfile overlays customConfig so max_connections tracks postgres.maxConnections
+# (the sizing tier). Keep these settings in sync with datastore/helmfile.yaml.gotmpl.
 customConfig: |
   wal_level = replica
   max_wal_senders = 16

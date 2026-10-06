@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-# Public DockerHub path: core, extra public rules, studios, CMS, enrichment.
+# Full stack: core, public rule list, studios, CMS, enrichment.
+# (Renamed from dockerhub. Same idea as tazama-stack "full-service".)
 
 install:
   postgresql: true

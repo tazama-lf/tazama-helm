@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-# Production-oriented core: infra, pipeline, Auth, Keycloak, relays, rules 901 and 902.
+# Production-oriented core: infra, pipeline, Auth, Keycloak, relays,
+# and the public rule list (30+ ids plus 901/902).
 
 install:
   postgresql: true
@@ -29,5 +30,38 @@ install:
 
 rules:
   enabled:
+    - "001"
+    - "002"
+    - "003"
+    - "004"
+    - "006"
+    - "007"
+    - "008"
+    - "010"
+    - "011"
+    - "016"
+    - "017"
+    - "018"
+    - "020"
+    - "021"
+    - "024"
+    - "025"
+    - "026"
+    - "027"
+    - "028"
+    - "030"
+    - "044"
+    - "045"
+    - "048"
+    - "054"
+    - "063"
+    - "074"
+    - "075"
+    - "076"
+    - "078"
+    - "083"
+    - "084"
+    - "090"
+    - "091"
     - "901"
     - "902"

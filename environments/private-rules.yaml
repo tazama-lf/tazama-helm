@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Overlay on the `full` profile. Helmfile loads full.yaml first, then this
+# file, then the cloud overlay. Until you uncomment `rules.imageRegistry`
+# below, `private-rules` installs the same stack as `full`.
+#
+# Use this file when rule processor images are not the public
+# docker.io/tazamaorg/rule-NNN images. Set the registry that hosts your
+# private rule images (example: a GHCR org you belong to). Public
+# tazamaorg/rule-NNN images stay on Docker Hub until that key is set.
+#
+# Keep private registry overrides here, not in environments/core.yaml.
+# frmscoe repos are often processing-engines and typologies, not
+# rule-NNN. Map those images by their real names when you have them.
+#
+# Former profile name: member. The wrapper still accepts -Profile member.
+
+# rules:
+#   imageRegistry: ghcr.io/frmscoe

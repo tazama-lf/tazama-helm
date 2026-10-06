@@ -7,29 +7,24 @@ cd "$ROOT"
 
 usage() {
   cat <<'EOF'
-Usage: ./tazama.sh apply|destroy|status|diff|template|lint|sync [core|dockerhub|member] [onprem|eks|gke|aks] [selector] [flags]
+Usage: ./tazama.sh <command> [profile] [cloud] [selector] [flags]
 
-Package switches (omit a flag to keep the profile YAML default):
-  --cms
-  --extensions | --dems | --deapi
-  --tools | --connection-studio | --rule-studio
-  --biar
-  --postgres-replica
+Commands: apply | destroy | status | diff | template | lint | sync | secrets
+Profiles: core | full | private-rules
+          (member is an alias for private-rules; dockerhub is an alias for full)
+Clouds:   onprem | eks | gke | aks
 
-Relay strings (nats|kafka|rabbitmq|rest; default nats if omitted):
-  --relay-efrup VALUE
-  --relay-tp VALUE
-  --relay-ea VALUE
-  --kafka-brokers VALUE
-  --rabbitmq-url VALUE
-  --rest-url VALUE
+Sizing flag:    --sizing standard|small|medium|large   (replica counts)
 
-Managed DB:
-  --postgresql-host VALUE
-  --postgresql-replica-host VALUE
-
-Selector:
-  --selector VALUE   (or a positional label such as name=tms-service)
+Package flags:  --cms --extensions --dems --deapi --tools
+                --connection-studio --rule-studio --biar --postgres-replica
+                --generate-secrets
+Relay flags:    --relay-efrup|--relay-tp|--relay-ea nats|kafka|rabbitmq|rest
+                --kafka-brokers|--rabbitmq-url|--rest-url VALUE
+Database flags: --postgresql-host|--postgresql-replica-host VALUE
+Ingress flags:  --ingress --ingress-domain DOMAIN [--ingress-class NAME]
+                [--ingress-service-type LoadBalancer|NodePort]
+Selector:       --selector LABEL   (or a positional label such as name=tms-service)
 EOF
 }
 
@@ -42,6 +37,7 @@ shift || true
 
 PROFILE="core"
 CLOUD="onprem"
+SIZING="standard"
 SELECTOR=""
 PROFILE_SET=0
 CLOUD_SET=0
@@ -63,6 +59,11 @@ RABBITMQ_URL=""
 REST_URL=""
 POSTGRESQL_HOST=""
 POSTGRESQL_REPLICA_HOST=""
+INGRESS=0
+INGRESS_DOMAIN=""
+INGRESS_CLASS=""
+INGRESS_SERVICE_TYPE=""
+GENERATE_SECRETS=0
 
 need_value() {
   local flag="$1"
@@ -101,6 +102,7 @@ while [[ $# -gt 0 ]]; do
     --rule-studio) RULE_STUDIO=1; shift ;;
     --biar) BIAR=1; shift ;;
     --postgres-replica) POSTGRES_REPLICA=1; shift ;;
+    --generate-secrets) GENERATE_SECRETS=1; shift ;;
     --relay-efrup)
       need_value "$arg" "${2:-}"
       RELAY_EFRUP="$2"
@@ -149,6 +151,31 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --postgresql-replica-host=*) POSTGRESQL_REPLICA_HOST="${arg#*=}"; shift ;;
+    --sizing)
+      need_value "$arg" "${2:-}"
+      SIZING="$2"
+      shift 2
+      ;;
+    --sizing=*) SIZING="${arg#*=}"; shift ;;
+    --ingress) INGRESS=1; shift ;;
+    --ingress-domain)
+      need_value "$arg" "${2:-}"
+      INGRESS_DOMAIN="$2"
+      shift 2
+      ;;
+    --ingress-domain=*) INGRESS_DOMAIN="${arg#*=}"; shift ;;
+    --ingress-class)
+      need_value "$arg" "${2:-}"
+      INGRESS_CLASS="$2"
+      shift 2
+      ;;
+    --ingress-class=*) INGRESS_CLASS="${arg#*=}"; shift ;;
+    --ingress-service-type)
+      need_value "$arg" "${2:-}"
+      INGRESS_SERVICE_TYPE="$2"
+      shift 2
+      ;;
+    --ingress-service-type=*) INGRESS_SERVICE_TYPE="${arg#*=}"; shift ;;
     --selector|-l)
       need_value "$arg" "${2:-}"
       SELECTOR="$2"
@@ -197,9 +224,17 @@ case "$COMMAND" in
 esac
 
 case "$PROFILE" in
-  core|dockerhub|member) ;;
+  dockerhub)
+    echo "Profile 'dockerhub' was renamed to 'full'. Using full." >&2
+    PROFILE="full"
+    ;;
+  member)
+    echo "Profile 'member' was renamed to 'private-rules'. Using private-rules." >&2
+    PROFILE="private-rules"
+    ;;
+  core|full|private-rules) ;;
   *)
-    echo "Unknown profile: $PROFILE (use core, dockerhub, or member)" >&2
+    echo "Unknown profile: $PROFILE (use core, full, or private-rules)" >&2
     exit 1
     ;;
 esac
@@ -212,6 +247,14 @@ case "$CLOUD" in
     ;;
 esac
 
+case "$SIZING" in
+  standard|small|medium|large) ;;
+  *)
+    echo "Unknown sizing: $SIZING (use standard, small, medium, or large)" >&2
+    exit 1
+    ;;
+esac
+
 RELAY_EFRUP="$(printf '%s' "$RELAY_EFRUP" | tr '[:upper:]' '[:lower:]')"
 RELAY_TP="$(printf '%s' "$RELAY_TP" | tr '[:upper:]' '[:lower:]')"
 RELAY_EA="$(printf '%s' "$RELAY_EA" | tr '[:upper:]' '[:lower:]')"
@@ -219,23 +262,143 @@ validate_relay "--relay-efrup" "$RELAY_EFRUP"
 validate_relay "--relay-tp" "$RELAY_TP"
 validate_relay "--relay-ea" "$RELAY_EA"
 
-export TAZAMA_CLOUD="$CLOUD"
-
-if ! command -v helmfile >/dev/null 2>&1; then
-  echo "helmfile is not on PATH. Install https://github.com/helmfile/helmfile/releases and retry." >&2
-  exit 1
+if [[ -n "$INGRESS_SERVICE_TYPE" ]]; then
+  case "$INGRESS_SERVICE_TYPE" in
+    LoadBalancer|NodePort) ;;
+    *)
+      echo "--ingress-service-type must be LoadBalancer or NodePort. Got '$INGRESS_SERVICE_TYPE'." >&2
+      exit 1
+      ;;
+  esac
 fi
 
-if ! command -v helm >/dev/null 2>&1; then
-  echo "helm is not on PATH. Install https://helm.sh/docs/intro/install/ and retry." >&2
-  exit 1
+export TAZAMA_CLOUD="$CLOUD"
+export TAZAMA_SIZING="$SIZING"
+
+if [[ "$COMMAND" != "secrets" ]]; then
+  if ! command -v helmfile >/dev/null 2>&1; then
+    echo "helmfile is not on PATH. Install https://github.com/helmfile/helmfile/releases and retry." >&2
+    exit 1
+  fi
+
+  if ! command -v helm >/dev/null 2>&1; then
+    echo "helm is not on PATH. Install https://helm.sh/docs/intro/install/ and retry." >&2
+    exit 1
+  fi
 fi
 
 if [[ ! -f values/secrets.yaml ]]; then
   cp values/secrets.example.yaml values/secrets.yaml
   echo "Created values/secrets.yaml from the example file."
-  echo "Default passwords match tazama-stack docker defaults (postgres / unused)."
-  echo "Change them before installing on a shared or cloud cluster."
+fi
+
+new_secret() {
+  # 15 random bytes encode to exactly 20 base64 characters (no padding).
+  local s
+  if command -v openssl >/dev/null 2>&1; then
+    s="$(openssl rand -base64 15 | tr -d '\n=' | tr '+/' '-_')"
+  else
+    s="$(dd if=/dev/urandom bs=15 count=1 2>/dev/null | base64 | tr -d '\n=' | tr '+/' '-_')"
+  fi
+  printf '%s' "${s:0:20}"
+}
+
+is_dummy_secret() {
+  local v="$1"
+  v="${v%\"}"
+  v="${v#\"}"
+  v="${v%\'}"
+  v="${v#\'}"
+  case "$v" in
+    unused|password|tazama|auth-lib-client-test-secret|"") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+ensure_passwords() {
+  local force="$1"
+  local tmp section key val stripped secret changed=0
+  local generated=()
+  tmp="$(mktemp)"
+  section=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ ^[[:space:]]{2}([A-Za-z0-9_]+):[[:space:]]*$ ]]; then
+      section="${BASH_REMATCH[1]}"
+    fi
+    if [[ "$line" =~ ^[[:space:]]{4}([A-Za-z0-9_]+):[[:space:]]*(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      val="${BASH_REMATCH[2]}"
+      case "$section.$key" in
+        postgres.password|postgres.replicationPassword|keycloak.adminPassword|keycloak.clientSecret|valkey.password)
+          stripped="$val"
+          stripped="${stripped%\"}"
+          stripped="${stripped#\"}"
+          if [[ "$force" -eq 1 ]] || is_dummy_secret "$stripped"; then
+            secret="$(new_secret)"
+            printf '    %s: "%s"\n' "$key" "$secret"
+            generated+=("$section.$key")
+            changed=1
+            continue
+          fi
+          ;;
+      esac
+    fi
+    printf '%s\n' "$line"
+  done < values/secrets.yaml > "$tmp"
+  if [[ "$changed" -eq 1 ]]; then
+    mv "$tmp" values/secrets.yaml
+    echo "Generated random secrets in values/secrets.yaml: ${generated[*]}."
+    echo "Those strings are 20-character URL-safe secrets. Kubernetes Secret objects encode them again; keep this file as plaintext YAML."
+    echo "If Postgres already initialized, changing postgres.password does not rewrite the role. Wipe the PVC or ALTER USER inside Postgres."
+  else
+    rm -f "$tmp"
+  fi
+}
+
+ensure_auth_keys() {
+  local force="$1"
+  if [[ "$force" -ne 1 ]]; then
+    if grep -Eq "BEGIN (RSA )?PRIVATE KEY" values/secrets.yaml \
+      && ! grep -q "AQDQZ9laLMsoNk8q" values/secrets.yaml; then
+      return 0
+    fi
+  fi
+  if ! command -v openssl >/dev/null 2>&1; then
+    echo "Auth needs an RSA key pair in values/secrets.yaml. openssl was not found. Install openssl, or paste a matching publicKey and privateKey yourself. Never commit the private key." >&2
+    exit 1
+  fi
+  work="$(mktemp -d)"
+  openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$work/private.pem" >/dev/null 2>&1
+  openssl rsa -in "$work/private.pem" -pubout -out "$work/public.pem" >/dev/null 2>&1
+  tmp="$(mktemp)"
+  awk -v pubfile="$work/public.pem" -v prifile="$work/private.pem" '
+    /^  auth:/ {
+      print "  auth:"
+      print "    publicKey: |"
+      while ((getline line < pubfile) > 0) if (line != "") print "      " line
+      close(pubfile)
+      print "    privateKey: |"
+      while ((getline line < prifile) > 0) if (line != "") print "      " line
+      close(prifile)
+      skip=1
+      next
+    }
+    skip && /^  [a-zA-Z]/ { skip=0 }
+    skip { next }
+    { print }
+  ' values/secrets.yaml > "$tmp"
+  mv "$tmp" values/secrets.yaml
+  rm -rf "$work"
+  echo "Generated an Auth RSA key pair in values/secrets.yaml (gitignored). Do not commit that file."
+}
+
+ensure_passwords "$GENERATE_SECRETS"
+ensure_auth_keys "$GENERATE_SECRETS"
+
+if [[ "$COMMAND" == "secrets" ]]; then
+  echo "Secrets written to values/secrets.yaml (gitignored). Each install gets its own 20-character URL-safe secrets. Do not commit that file."
+  echo "Kubernetes Secret objects encode the same strings again. Keep plaintext in the YAML. Do not paste kubectl base64 data back into this file."
+  exit 0
 fi
 
 STATE_SETS=()
@@ -310,9 +473,31 @@ if [[ -n "$POSTGRESQL_REPLICA_HOST" ]]; then
   add_set "install.postgresqlReplica=false"
 fi
 
+if [[ "$INGRESS" -eq 1 ]]; then
+  add_set "ingress.enabled=true"
+  add_set "install.ingressNginx=true"
+fi
+if [[ -n "$INGRESS_DOMAIN" ]]; then
+  add_set_string "ingress.domain=$INGRESS_DOMAIN"
+fi
+if [[ -n "$INGRESS_CLASS" ]]; then
+  add_set_string "ingress.className=$INGRESS_CLASS"
+fi
+if [[ -n "$INGRESS_SERVICE_TYPE" ]]; then
+  add_set_string "ingressNginx.serviceType=$INGRESS_SERVICE_TYPE"
+  add_set_string "ingress.nginx.serviceType=$INGRESS_SERVICE_TYPE"
+fi
+
 echo "Profile: $PROFILE"
 echo "Cloud:   $CLOUD"
+echo "Sizing:  $SIZING"
 echo "Command: $COMMAND"
+
+if [[ "$SIZING" != "standard" && ( "$COMMAND" == "apply" || "$COMMAND" == "sync" ) ]]; then
+  echo "Sizing '$SIZING' raises replica counts. Confirm the cluster has capacity:"
+  echo "  kubectl get nodes"
+  echo "  kubectl top nodes"
+fi
 
 ARGS=(-e "$PROFILE" -f helmfile.yaml.gotmpl)
 if [[ -n "${KUBECONFIG:-}" ]]; then
@@ -351,7 +536,8 @@ case "$COMMAND" in
     if helm plugin list 2>/dev/null | grep -q '^diff'; then
       helmfile "${ARGS[@]}" apply
     else
-      echo "helm-diff plugin not found; using helmfile sync instead of apply."
+      echo "helm-diff plugin not found; using helmfile sync instead of apply." >&2
+      echo "helm-diff can also skip nested helmfiles; for a first install prefer: ./tazama.sh sync $PROFILE $CLOUD" >&2
       helmfile "${ARGS[@]}" sync
     fi
     ;;
@@ -367,7 +553,12 @@ if [[ "$COMMAND" == "apply" ]]; then
   echo
   echo "Install submitted. Watch pods with:"
   echo "  kubectl get pods -n tazama -w"
-  echo "Port-forward TMS (core profile / on-prem without ingress):"
-  echo "  kubectl port-forward -n tazama svc/tms-service 3000:3000"
-  echo "  kubectl port-forward -n tazama svc/admin-service 5100:5100"
+  if [[ "$INGRESS" -eq 1 || "$CLOUD" != "onprem" ]]; then
+    echo "Ingress: kubectl get ingress -n tazama"
+    echo "Map hosts (tms.<domain>, admin.<domain>, ...) in /etc/hosts or C:\\Windows\\System32\\drivers\\etc\\hosts if DNS is not set."
+  else
+    echo "Port-forward TMS (core profile / on-prem without ingress):"
+    echo "  kubectl port-forward -n tazama svc/tms-service 3000:3000"
+    echo "  kubectl port-forward -n tazama svc/admin-service 5100:5100"
+  fi
 fi

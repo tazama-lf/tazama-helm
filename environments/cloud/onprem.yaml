@@ -14,8 +14,10 @@ ingress:
   className: nginx
   domain: tazama.local
 
+# Kind / Docker Desktop / kubeadm usually have no cloud load balancer.
+# LoadBalancer stays <pending> and helm --wait hangs until timeout.
 ingressNginx:
-  serviceType: LoadBalancer
+  serviceType: NodePort
   serviceAnnotations: {}
 
 valkey:

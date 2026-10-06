@@ -14,6 +14,10 @@ helmDefaults:
 {{- $tag := .Values.global.tazamaVersion }}
 {{- $pull := .Values.global.imagePullPolicy }}
 {{- $sc := .Values.startupChecks }}
+{{- $ing := .Values.ingress }}
+{{- $ingHosts := $ing.hosts | default dict }}
+{{- $ingDomain := $ing.domain | default "tazama.local" }}
+{{- $ingClass := $ing.className | default "nginx" }}
 
 repositories:
   - name: opensearch
@@ -29,10 +33,12 @@ releases:
       tier: extensions
     values:
       - ../extensions/values/opensearch.yaml
+      {{- if .Values.storageClass }}
+      # An empty storageClass must not emit a bare `persistence:` key here: that
+      # overlays null over the whole map and the chart loses persistence.enabled.
       - persistence:
-          {{- if .Values.storageClass }}
           storageClass: {{ .Values.storageClass | quote }}
-          {{- end }}
+      {{- end }}
 
   - name: couchdb
     namespace: {{ $ns }}
@@ -88,12 +94,16 @@ releases:
           SERVER_URL: {{ printf "nats://%s:4222" $nats | quote }}
           CONFIGURATION_DATABASE_URL: {{ printf "postgresql://%s@%s:5432/configuration" .Values.secrets.postgres.username $pg | quote }}
           ADMIN_SERVICE_URL: http://admin-service:5100
-        {{- if .Values.ingress.enabled }}
+        {{- if $ing.enabled }}
         ingress:
           enabled: true
-          className: {{ .Values.ingress.className | quote }}
+          className: {{ $ingClass | quote }}
+          annotations:
+            {{- toYaml ($ing.annotations | default dict) | nindent 12 }}
+          tls:
+            {{- toYaml ($ing.tls | default list) | nindent 12 }}
           hosts:
-            - host: {{ printf "tcs-api.%s" .Values.ingress.domain | quote }}
+            - host: {{ printf "%s.%s" ($ingHosts.tcsApi | default "tcs-api") $ingDomain | quote }}
               path: /
         {{- end }}
 
@@ -111,12 +121,16 @@ releases:
           pullPolicy: {{ $pull | quote }}
         env:
           VITE_API_BASE_URL: {{ printf "http://connection-studio-backend:3010" | quote }}
-        {{- if .Values.ingress.enabled }}
+        {{- if $ing.enabled }}
         ingress:
           enabled: true
-          className: {{ .Values.ingress.className | quote }}
+          className: {{ $ingClass | quote }}
+          annotations:
+            {{- toYaml ($ing.annotations | default dict) | nindent 12 }}
+          tls:
+            {{- toYaml ($ing.tls | default list) | nindent 12 }}
           hosts:
-            - host: {{ printf "tcs.%s" .Values.ingress.domain | quote }}
+            - host: {{ printf "%s.%s" ($ingHosts.tcs | default "tcs") $ingDomain | quote }}
               path: /
         {{- end }}
 
@@ -134,12 +148,16 @@ releases:
           pullPolicy: {{ $pull | quote }}
         env:
           ADMIN_SERVICE_URL: http://admin-service:5100
-        {{- if .Values.ingress.enabled }}
+        {{- if $ing.enabled }}
         ingress:
           enabled: true
-          className: {{ .Values.ingress.className | quote }}
+          className: {{ $ingClass | quote }}
+          annotations:
+            {{- toYaml ($ing.annotations | default dict) | nindent 12 }}
+          tls:
+            {{- toYaml ($ing.tls | default list) | nindent 12 }}
           hosts:
-            - host: {{ printf "trs-api.%s" .Values.ingress.domain | quote }}
+            - host: {{ printf "%s.%s" ($ingHosts.trsApi | default "trs-api") $ingDomain | quote }}
               path: /
         {{- end }}
 
@@ -155,12 +173,16 @@ releases:
           repository: {{ printf "%s/rule-studio-frontend" $img }}
           tag: {{ $tag | quote }}
           pullPolicy: {{ $pull | quote }}
-        {{- if .Values.ingress.enabled }}
+        {{- if $ing.enabled }}
         ingress:
           enabled: true
-          className: {{ .Values.ingress.className | quote }}
+          className: {{ $ingClass | quote }}
+          annotations:
+            {{- toYaml ($ing.annotations | default dict) | nindent 12 }}
+          tls:
+            {{- toYaml ($ing.tls | default list) | nindent 12 }}
           hosts:
-            - host: {{ printf "trs.%s" .Values.ingress.domain | quote }}
+            - host: {{ printf "%s.%s" ($ingHosts.trs | default "trs") $ingDomain | quote }}
               path: /
         {{- end }}
 
@@ -196,12 +218,16 @@ releases:
           FLOWABLE_URL: http://flowable:8080/flowable-rest
           COUCHDB_URL: http://couchdb:5984
           OPENSEARCH_NODE: http://opensearch:9200
-        {{- if .Values.ingress.enabled }}
+        {{- if $ing.enabled }}
         ingress:
           enabled: true
-          className: {{ .Values.ingress.className | quote }}
+          className: {{ $ingClass | quote }}
+          annotations:
+            {{- toYaml ($ing.annotations | default dict) | nindent 12 }}
+          tls:
+            {{- toYaml ($ing.tls | default list) | nindent 12 }}
           hosts:
-            - host: {{ printf "cms-api.%s" .Values.ingress.domain | quote }}
+            - host: {{ printf "%s.%s" ($ingHosts.cmsApi | default "cms-api") $ingDomain | quote }}
               path: /
         {{- end }}
 
@@ -217,12 +243,16 @@ releases:
           repository: {{ printf "%s/case-management-system-frontend" $img }}
           tag: {{ $tag | quote }}
           pullPolicy: {{ $pull | quote }}
-        {{- if .Values.ingress.enabled }}
+        {{- if $ing.enabled }}
         ingress:
           enabled: true
-          className: {{ .Values.ingress.className | quote }}
+          className: {{ $ingClass | quote }}
+          annotations:
+            {{- toYaml ($ing.annotations | default dict) | nindent 12 }}
+          tls:
+            {{- toYaml ($ing.tls | default list) | nindent 12 }}
           hosts:
-            - host: {{ printf "cms.%s" .Values.ingress.domain | quote }}
+            - host: {{ printf "%s.%s" ($ingHosts.cms | default "cms") $ingDomain | quote }}
               path: /
         {{- end }}
 

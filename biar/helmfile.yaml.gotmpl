@@ -6,6 +6,11 @@ helmDefaults:
   createNamespace: true
   cleanupOnFail: true
 
+{{- $ing := .Values.ingress }}
+{{- $ingHosts := $ing.hosts | default dict }}
+{{- $ingDomain := $ing.domain | default "tazama.local" }}
+{{- $ingClass := $ing.className | default "nginx" }}
+
 {{- if .Values.install.biar }}
 {{- $repHost := .Values.hosts.postgresqlReplica | default "" }}
 {{- if and (not .Values.install.postgresqlReplica) (or (eq $repHost "") (eq $repHost "postgresql-replica")) }}
@@ -28,11 +33,15 @@ releases:
           POSTGRES_HOST: {{ .Values.hosts.postgresqlReplica | quote }}
           POSTGRES_PORT: "5432"
           POSTGRES_JDBC_PREFIX: {{ printf "jdbc:postgresql://%s:5432" .Values.hosts.postgresqlReplica | quote }}
-        {{- if .Values.ingress.enabled }}
+        {{- if $ing.enabled }}
         ingress:
           enabled: true
-          className: {{ .Values.ingress.className | quote }}
+          className: {{ $ingClass | quote }}
+          annotations:
+            {{- toYaml ($ing.annotations | default dict) | nindent 12 }}
+          tls:
+            {{- toYaml ($ing.tls | default list) | nindent 12 }}
           hosts:
-            - host: {{ printf "nifi.%s" .Values.ingress.domain | quote }}
+            - host: {{ printf "%s.%s" ($ingHosts.nifi | default "nifi") $ingDomain | quote }}
               path: /
         {{- end }}

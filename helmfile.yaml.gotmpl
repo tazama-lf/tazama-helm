@@ -15,23 +15,29 @@ environments:
     missingFileHandler: Warn
     values:
       - values/defaults.yaml
+      - values/ingress.yaml
       - environments/core.yaml
       - environments/cloud/{{ env "TAZAMA_CLOUD" | default "onprem" }}.yaml
+      - values/sizing/{{ env "TAZAMA_SIZING" | default "standard" }}.yaml
       - values/secrets.yaml
-  dockerhub:
+  full:
     missingFileHandler: Warn
     values:
       - values/defaults.yaml
-      - environments/dockerhub.yaml
+      - values/ingress.yaml
+      - environments/full.yaml
       - environments/cloud/{{ env "TAZAMA_CLOUD" | default "onprem" }}.yaml
+      - values/sizing/{{ env "TAZAMA_SIZING" | default "standard" }}.yaml
       - values/secrets.yaml
-  member:
+  private-rules:
     missingFileHandler: Warn
     values:
       - values/defaults.yaml
-      - environments/dockerhub.yaml
-      - environments/member.yaml
+      - values/ingress.yaml
+      - environments/full.yaml
+      - environments/private-rules.yaml
       - environments/cloud/{{ env "TAZAMA_CLOUD" | default "onprem" }}.yaml
+      - values/sizing/{{ env "TAZAMA_SIZING" | default "standard" }}.yaml
       - values/secrets.yaml
 
 ---

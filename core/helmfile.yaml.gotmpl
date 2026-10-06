@@ -17,6 +17,11 @@ helmDefaults:
 {{- $sc := .Values.startupChecks }}
 {{- $relay := .Values.relay | default dict }}
 {{- $authOn := .Values.auth.authenticated | default false }}
+{{- $reps := .Values.replicas | default dict }}
+{{- $ing := .Values.ingress }}
+{{- $ingHosts := $ing.hosts | default dict }}
+{{- $ingDomain := $ing.domain | default "tazama.local" }}
+{{- $ingClass := $ing.className | default "nginx" }}
 
 {{- $transports := list }}
 {{- if and .Values.install.relay .Values.install.eventFlow }}
@@ -60,7 +65,8 @@ releases:
     values:
       - ../core/values/tms.yaml
       - ../core/values/db-passwords.yaml
-      - image:
+      - replicaCount: {{ $reps.tms | default 1 }}
+        image:
           repository: {{ printf "%s/tms-service" $img }}
           tag: {{ $tag | quote }}
           pullPolicy: {{ $pull | quote }}
@@ -95,12 +101,16 @@ releases:
             secret:
               secretName: tazama-auth-keys
         {{- end }}
-        {{- if .Values.ingress.enabled }}
+        {{- if $ing.enabled }}
         ingress:
           enabled: true
-          className: {{ .Values.ingress.className | quote }}
+          className: {{ $ingClass | quote }}
+          annotations:
+            {{- toYaml ($ing.annotations | default dict) | nindent 12 }}
+          tls:
+            {{- toYaml ($ing.tls | default list) | nindent 12 }}
           hosts:
-            - host: {{ printf "tms.%s" .Values.ingress.domain | quote }}
+            - host: {{ printf "%s.%s" ($ingHosts.tms | default "tms") $ingDomain | quote }}
               path: /
         {{- end }}
 
@@ -113,7 +123,8 @@ releases:
     values:
       - ../core/values/admin.yaml
       - ../core/values/db-passwords.yaml
-      - image:
+      - replicaCount: {{ $reps.admin | default 1 }}
+        image:
           repository: {{ printf "%s/admin-service" $img }}
           tag: {{ $tag | quote }}
           pullPolicy: {{ $pull | quote }}
@@ -150,12 +161,16 @@ releases:
             secret:
               secretName: tazama-auth-keys
         {{- end }}
-        {{- if .Values.ingress.enabled }}
+        {{- if $ing.enabled }}
         ingress:
           enabled: true
-          className: {{ .Values.ingress.className | quote }}
+          className: {{ $ingClass | quote }}
+          annotations:
+            {{- toYaml ($ing.annotations | default dict) | nindent 12 }}
+          tls:
+            {{- toYaml ($ing.tls | default list) | nindent 12 }}
           hosts:
-            - host: {{ printf "admin.%s" .Values.ingress.domain | quote }}
+            - host: {{ printf "%s.%s" ($ingHosts.admin | default "admin") $ingDomain | quote }}
               path: /
         {{- end }}
 
@@ -168,7 +183,8 @@ releases:
     values:
       - ../core/values/event-director.yaml
       - ../core/values/db-passwords.yaml
-      - image:
+      - replicaCount: {{ $reps.eventDirector | default 1 }}
+        image:
           repository: {{ printf "%s/event-director" $img }}
           tag: {{ $tag | quote }}
           pullPolicy: {{ $pull | quote }}
@@ -197,7 +213,8 @@ releases:
     values:
       - ../core/values/event-flow.yaml
       - ../core/values/db-passwords.yaml
-      - image:
+      - replicaCount: {{ $reps.eventFlow | default 1 }}
+        image:
           repository: {{ printf "%s/event-flow" $img }}
           tag: {{ $tag | quote }}
           pullPolicy: {{ $pull | quote }}
@@ -230,7 +247,8 @@ releases:
     values:
       - ../core/values/typology-processor.yaml
       - ../core/values/db-passwords.yaml
-      - image:
+      - replicaCount: {{ $reps.typologyProcessor | default 1 }}
+        image:
           repository: {{ printf "%s/typology-processor" $img }}
           tag: {{ $tag | quote }}
           pullPolicy: {{ $pull | quote }}
@@ -263,7 +281,8 @@ releases:
     values:
       - ../core/values/event-adjudicator.yaml
       - ../core/values/db-passwords.yaml
-      - image:
+      - replicaCount: {{ $reps.eventAdjudicator | default 1 }}
+        image:
           repository: {{ printf "%s/event-adjudicator" $img }}
           tag: {{ $tag | quote }}
           pullPolicy: {{ $pull | quote }}
@@ -296,7 +315,8 @@ releases:
       tier: core
     values:
       - ../core/values/keycloak.yaml
-      - image:
+      - replicaCount: {{ $reps.keycloak | default 1 }}
+        image:
           repository: quay.io/keycloak/keycloak
           tag: "23.0.6"
           pullPolicy: {{ $pull | quote }}
@@ -313,7 +333,7 @@ releases:
           schemaDatabase: keycloak
           schemaTable: pg_database
         env:
-          KC_HOSTNAME: {{ ternary (printf "keycloak.%s" .Values.ingress.domain) $kc .Values.ingress.enabled | quote }}
+          KC_HOSTNAME: {{ ternary (printf "%s.%s" ($ingHosts.keycloak | default "keycloak") $ingDomain) $kc $ing.enabled | quote }}
           KC_DB_URL: {{ printf "jdbc:postgresql://%s:5432/keycloak" $pg | quote }}
           KC_DB_USERNAME: {{ .Values.secrets.postgres.username | quote }}
         extraEnv:
@@ -332,12 +352,16 @@ releases:
               secretKeyRef:
                 name: tazama-credentials
                 key: KEYCLOAK_ADMIN_PASSWORD
-        {{- if .Values.ingress.enabled }}
+        {{- if $ing.enabled }}
         ingress:
           enabled: true
-          className: {{ .Values.ingress.className | quote }}
+          className: {{ $ingClass | quote }}
+          annotations:
+            {{- toYaml ($ing.annotations | default dict) | nindent 12 }}
+          tls:
+            {{- toYaml ($ing.tls | default list) | nindent 12 }}
           hosts:
-            - host: {{ printf "keycloak.%s" .Values.ingress.domain | quote }}
+            - host: {{ printf "%s.%s" ($ingHosts.keycloak | default "keycloak") $ingDomain | quote }}
               path: /
         {{- end }}
 
@@ -353,7 +377,8 @@ releases:
     {{- end }}
     values:
       - ../core/values/auth.yaml
-      - image:
+      - replicaCount: {{ $reps.auth | default 1 }}
+        image:
           repository: {{ printf "%s/auth-service" $img }}
           tag: {{ $tag | quote }}
           pullPolicy: {{ $pull | quote }}
@@ -365,12 +390,16 @@ releases:
               secretKeyRef:
                 name: tazama-credentials
                 key: KEYCLOAK_CLIENT_SECRET
-        {{- if .Values.ingress.enabled }}
+        {{- if $ing.enabled }}
         ingress:
           enabled: true
-          className: {{ .Values.ingress.className | quote }}
+          className: {{ $ingClass | quote }}
+          annotations:
+            {{- toYaml ($ing.annotations | default dict) | nindent 12 }}
+          tls:
+            {{- toYaml ($ing.tls | default list) | nindent 12 }}
           hosts:
-            - host: {{ printf "auth.%s" .Values.ingress.domain | quote }}
+            - host: {{ printf "%s.%s" ($ingHosts.auth | default "auth") $ingDomain | quote }}
               path: /
         {{- end }}
 
@@ -404,6 +433,7 @@ releases:
       - ../core/values/relay.yaml
       - name: {{ $svc.release }}
         fullnameOverride: {{ $svc.release }}
+        replicaCount: {{ $reps.relay | default 1 }}
         image:
           repository: {{ printf "%s/relay-service-integration-%s" $img $transport }}
           tag: {{ $tag | quote }}

@@ -15,6 +15,7 @@ helmDefaults:
 {{- $rel := .Values.global.ruleRel }}
 {{- $sc := .Values.startupChecks }}
 {{- $reg := .Values.rules.imageRegistry | default .Values.global.imageRegistry }}
+{{- $reps := .Values.replicas | default dict }}
 
 releases:
 {{- if and .Values.install.rules .Values.rules.enabled }}
@@ -29,7 +30,7 @@ releases:
       - ../core/values/db-passwords.yaml
       - name: rule-{{ $id }}
         fullnameOverride: rule-{{ $id }}
-        replicaCount: 1
+        replicaCount: {{ $reps.rules | default 1 }}
         service:
           enabled: false
         probes:
