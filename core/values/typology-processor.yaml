@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+name: typology-processor
+fullnameOverride: typology-processor
+replicaCount: 1
+service:
+  enabled: false
+probes:
+  enabled: false
+startupChecks:
+  postgres: true
+  valkey: true
+  nats: true
+env:
+  FUNCTION_NAME: typology-processor
+  NODE_ENV: dev
+  MAX_CPU: "1"
+  SUPPRESS_ALERTS: "true"
+  APM_SERVICE_NAME: typology-processor
+  APM_ACTIVE: "false"
+  REDIS_DATABASE: "0"
+  REDIS_IS_CLUSTER: "false"
+  DISTRIBUTED_CACHETTL: "300"
+  DISTRIBUTED_CACHE_ENABLED: "false"
+  LOCAL_CACHETTL: "300"
+  LOCAL_CACHE_ENABLED: "false"
+  CONFIGURATION_DATABASE: configuration
+  CONFIGURATION_DATABASE_USER: postgres
+  LOG_LEVEL: info
+  STARTUP_TYPE: nats
+  SERVICE_CHANNEL_CONSUMER: service-channel
+  SERVICE_CHANNEL_PRODUCER: service-channel-ack
+  SERVICE_CHANNEL_CLASS: typology-processor
+  INTERDICTION_DESTINATION: global
+  INTERDICTION_PRODUCER: interdiction-service

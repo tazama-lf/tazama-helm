@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+name: event-flow
+fullnameOverride: event-flow
+replicaCount: 1
+service:
+  enabled: false
+probes:
+  enabled: false
+startupChecks:
+  postgres: true
+  valkey: true
+  nats: true
+env:
+  FUNCTION_NAME: event-flow-rule-processor
+  RULE_NAME: EFRuP
+  RULE_VERSION: 4.0.0
+  NODE_ENV: dev
+  MAX_CPU: "1"
+  REDIS_DATABASE: "0"
+  REDIS_IS_CLUSTER: "false"
+  DISTRIBUTED_CACHETTL: "300"
+  DISTRIBUTED_CACHE_ENABLED: "false"
+  LOCAL_CACHETTL: "300"
+  LOCAL_CACHE_ENABLED: "false"
+  CONFIGURATION_DATABASE: configuration
+  CONFIGURATION_DATABASE_USER: postgres
+  SUPPRESS_ALERTS: "true"
+  APM_ACTIVE: "false"
+  APM_SERVICE_NAME: event-flow
+  LOG_LEVEL: info
+  STARTUP_TYPE: nats
+  INTERDICTION_DESTINATION: global
+  INTERDICTION_PRODUCER: interdiction-service

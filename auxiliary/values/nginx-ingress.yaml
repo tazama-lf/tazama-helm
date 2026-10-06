@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# ingress-nginx chart defaults. Helmfile overlays replicaCount, service.type,
+# and service.annotations from ingressNginx / ingress.nginx values so wrappers
+# and cloud overlays can change them without editing this file.
+
+controller:
+  replicaCount: 1
+  ingressClassResource:
+    name: nginx
+    enabled: true
+    default: false
+  ingressClass: nginx
+  watchIngressWithoutClass: false
+  allowSnippetAnnotations: false
+  service:
+    type: NodePort
+    annotations: {}
+    externalTrafficPolicy: Cluster
+  publishService:
+    enabled: true
+  metrics:
+    enabled: false

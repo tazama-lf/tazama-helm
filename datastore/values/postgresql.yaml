@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+fullnameOverride: postgresql
+service:
+  type: ClusterIP
+  port: 5432
+settings:
+  superuser:
+    value: postgres
+  superuserPassword:
+    value: unused
+  authMethod: scram-sha-256
+storage:
+  requestedSize: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  className: ""
+extraScripts: tazama-postgres-init
+# Helmfile overlays customConfig so max_connections tracks postgres.maxConnections
+# (the sizing tier). Keep these settings in sync with datastore/helmfile.yaml.gotmpl.
+customConfig: |
+  wal_level = replica
+  max_wal_senders = 16
+  max_replication_slots = 16
+  hot_standby = on
+  wal_keep_size = 1024MB
+resources: {}

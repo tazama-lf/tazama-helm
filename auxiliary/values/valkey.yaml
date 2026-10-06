@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+fullnameOverride: valkey
+service:
+  type: ClusterIP
+  port: 6379
+auth:
+  enabled: false
+replica:
+  enabled: false
+  replicas: 0
+dataStorage:
+  enabled: true
+  requestedSize: 1Gi

@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: Apache-2.0
+name: tms-service
+fullnameOverride: tms-service
+replicaCount: 1
+service:
+  enabled: true
+  port: 3000
+  targetPort: 3000
+probes:
+  enabled: true
+  path: /
+  port: http
+startupChecks:
+  postgres: true
+  valkey: true
+  nats: true
+env:
+  FUNCTION_NAME: transaction-monitoring-service
+  MAX_CPU: "1"
+  PORT: "3000"
+  QUOTING: "false"
+  NODE_ENV: dev
+  APM_SERVICE_NAME: tms-service
+  APM_ACTIVE: "false"
+  REDIS_DATABASE: "0"
+  REDIS_IS_CLUSTER: "false"
+  DISTRIBUTED_CACHETTL: "300"
+  DISTRIBUTED_CACHE_ENABLED: "false"
+  LOCAL_CACHETTL: "300"
+  LOCAL_CACHE_ENABLED: "false"
+  RAW_HISTORY_DATABASE: raw_history
+  RAW_HISTORY_DATABASE_USER: postgres
+  EVENT_HISTORY_DATABASE: event_history
+  EVENT_HISTORY_DATABASE_USER: postgres
+  LOG_LEVEL: debug
+  STARTUP_TYPE: nats
+  PRODUCER_STREAM: event-director
+  AUTHENTICATED: "false"
+  CORS_POLICY: demo

@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+name: admin-service
+fullnameOverride: admin-service
+replicaCount: 1
+service:
+  enabled: true
+  port: 5100
+  targetPort: 3100
+probes:
+  enabled: true
+  path: /
+  port: http
+startupChecks:
+  postgres: true
+  valkey: true
+  nats: true
+env:
+  FUNCTION_NAME: admin-service
+  MAX_CPU: "1"
+  NODE_ENV: dev
+  ACTIVE_CONDITIONS_ONLY: "false"
+  PORT: "3100"
+  APM_SERVICE_NAME: admin-service
+  APM_ACTIVE: "false"
+  REDIS_DATABASE: "0"
+  REDIS_IS_CLUSTER: "false"
+  DISTRIBUTED_CACHETTL: "300"
+  DISTRIBUTED_CACHE_ENABLED: "false"
+  EVALUATION_DATABASE: evaluation
+  EVALUATION_DATABASE_USER: postgres
+  CONFIGURATION_DATABASE: configuration
+  CONFIGURATION_DATABASE_USER: postgres
+  EVENT_HISTORY_DATABASE: event_history
+  EVENT_HISTORY_DATABASE_USER: postgres
+  RAW_HISTORY_DATABASE: raw_history
+  RAW_HISTORY_DATABASE_USER: postgres
+  LOG_LEVEL: info
+  STARTUP_TYPE: nats
+  SERVICE_CHANNEL_PRODUCER: service-channel
+  SERVICE_CHANNEL_CONSUMER: service-channel-ack
+  AUTHENTICATED: "false"
+  CORS_POLICY: demo

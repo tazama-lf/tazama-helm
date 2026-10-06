@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Default sizing: one pod per service. This is what you get when you do not
+# pass -Sizing / --sizing. Suitable for Kind, Docker Desktop, and any
+# single-node or small cluster.
+
+sizing: standard
+
+replicas:
+  tms: 1
+  admin: 1
+  eventDirector: 1
+  eventFlow: 1
+  typologyProcessor: 1
+  eventAdjudicator: 1
+  auth: 1
+  keycloak: 1
+  relay: 1
+  rules: 1
+
+postgres:
+  maxConnections: 200

@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Ingress parameters. Hosts become <prefix>.<domain>, for example tms.tazama.local.
+# Default is off on on-prem (use port-forward). Cloud overlays (eks/gke/aks) turn
+# this on. One-liner: -Ingress / --ingress also installs ingress-nginx.
+
+ingress:
+  enabled: false
+  className: nginx
+  domain: tazama.local
+  annotations: {}
+  tls: []
+  hosts:
+    tms: tms
+    admin: admin
+    auth: auth
+    keycloak: keycloak
+    tcs: tcs
+    tcsApi: tcs-api
+    trs: trs
+    trsApi: trs-api
+    cms: cms
+    cmsApi: cms-api
+    nifi: nifi
+  # ingress-nginx controller knobs. Wrapper -IngressServiceType sets serviceType.
+  # Cloud overlays still use the top-level ingressNginx.* keys; helmfile prefers
+  # those when they are set so EKS/GKE/AKS annotations keep working.
+  nginx:
+    serviceType: NodePort
+    replicaCount: 1

@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+name: connection-studio-backend
+fullnameOverride: connection-studio-backend
+replicaCount: 1
+service:
+  enabled: true
+  port: 3010
+  targetPort: 3010
+probes:
+  enabled: true
+  path: /
+  port: http
+startupChecks:
+  postgres: true
+  valkey: false
+  nats: true
+env:
+  FUNCTION_NAME: connection-studio-backend
+  NODE_ENV: dev
+  MAX_CPU: "2"
+  SESSION_TIMEOUT_MINUTES: "30"
+  POSTGRES_USER: postgres
+  POSTGRES_DB: configuration
+  POSTGRES_PORT: "5432"
+  CONFIGURATION_DATABASE: configuration
+  CONFIGURATION_DATABASE_USER: postgres
+  STARTUP_TYPE: nats
+  PRODUCER_STREAM: config.notification
+  CONSUMER_STREAM: config.notification
+  STREAM_SUBJECT: config.notification
+  AUTHENTICATED: "false"
+  VITE_APP_TITLE: Tazama Connection Studio

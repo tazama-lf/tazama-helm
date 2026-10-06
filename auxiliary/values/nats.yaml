@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: Apache-2.0
+fullnameOverride: nats
+config:
+  cluster:
+    enabled: false
+  nats:
+    port: 4222
+  monitor:
+    enabled: true
+    port: 8222
+  jetstream:
+    enabled: true
+    fileStore:
+      enabled: true
+      dir: /data
+      pvc:
+        enabled: true
+        size: 8Gi
+    memoryStore:
+      enabled: true
+      maxSize: 128Mi
+service:
+  type: ClusterIP
+  enabled: true
+  ports:
+    nats:
+      enabled: true
+    monitor:
+      enabled: false
+    cluster:
+      enabled: false
+    leafnodes:
+      enabled: false
+    websocket:
+      enabled: false
+    mqtt:
+      enabled: false
+    gateway:
+      enabled: false
+    profiling:
+      enabled: false
+natsBox:
+  enabled: false
+container:
+  resources: {}
