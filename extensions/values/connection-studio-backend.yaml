@@ -30,3 +30,25 @@ env:
   STREAM_SUBJECT: config.notification
   AUTHENTICATED: "false"
   VITE_APP_TITLE: Tazama Connection Studio
+  TAZAMA_AUTH_URL: http://auth-service:3020/v1/auth
+  AUTH_PUBLIC_KEY_PATH: /home/app/test-public-key.pem
+  CERT_PATH_PUBLIC: /home/app/test-public-key.pem
+  ENCRYPTION_KEY: 8fj29dkd82hs91kd93kd82hs91kd83ks
+  IV_LENGTH: "16"
+  OPENSEARCH_NODE: http://opensearch:9200
+  OPENSEARCH_USERNAME: admin
+  OPENSEARCH_PASSWORD: admin
+  AUDIT_PROVIDER: opensearch
+  DEMS_URL: http://dems:3002
+  DEAPI_URL: http://deapi:3001
+  DEMS_STREAM: dems.notify
+  AUTH_URL: http://keycloak:8080
+volumeMounts:
+  - name: auth-keys
+    mountPath: /home/app/test-public-key.pem
+    subPath: public.pem
+    readOnly: true
+volumes:
+  - name: auth-keys
+    secret:
+      secretName: tazama-auth-keys

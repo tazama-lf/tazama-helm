@@ -21,3 +21,27 @@ env:
   PORT: "3005"
   AUTHENTICATED: "false"
   VITE_APP_NAME: Model Management
+  TAZAMA_AUTH_URL: http://auth-service:3020/v1/auth
+  AUTH_PUBLIC_KEY_PATH: /home/app/test-public-key.pem
+  CERT_PATH_PUBLIC: /home/app/test-public-key.pem
+  ADMIN_SERVICE_URL: http://admin-service:5100
+  ALLOWED_ORIGINS: "*"
+  AUDIT_PROVIDER: opensearch
+  OPENSEARCH_NODE: http://opensearch:9200
+  OPENSEARCH_USERNAME: admin
+  OPENSEARCH_PASSWORD: admin
+  OPENSEARCH_INDEX: rule-studio-audit
+  REDIS_HOST: valkey
+  REDIS_PORT: "6379"
+  IV_LENGTH: "12"
+  CRYPTO_SECRET_KEY: rCRrt08XYmYZrUoKffOQWXa327AJyBxv
+  ENCRYPTION_KEY: rCRrt08XYmYZrUoKffOQWXa327AJyBxv
+volumeMounts:
+  - name: auth-keys
+    mountPath: /home/app/test-public-key.pem
+    subPath: public.pem
+    readOnly: true
+volumes:
+  - name: auth-keys
+    secret:
+      secretName: tazama-auth-keys

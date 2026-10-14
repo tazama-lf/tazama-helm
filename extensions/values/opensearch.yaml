@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 singleNode: true
 replicas: 1
+# Security plugin is off, so HTTP not HTTPS. Apps use http://opensearch:9200.
+protocol: http
 persistence:
   enabled: true
   size: 20Gi
@@ -17,3 +19,20 @@ resources:
   limits:
     cpu: "1"
     memory: 2Gi
+# Chart Service is opensearch-cluster-master. Studio/CMS look up host "opensearch".
+extraObjects:
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: opensearch
+      labels:
+        app.kubernetes.io/part-of: tazama
+    spec:
+      type: ClusterIP
+      ports:
+        - name: http
+          port: 9200
+          targetPort: 9200
+      selector:
+        app.kubernetes.io/name: opensearch
+        app.kubernetes.io/instance: opensearch

@@ -24,3 +24,30 @@ env:
   STARTUP_TYPE: nats
   PRODUCER_STREAM: dems.notification.response
   CONSUMER_STREAM: config.notification
+  TAZAMA_AUTH_URL: http://auth-service:3020/v1/auth/login
+  AUTH_PUBLIC_KEY_PATH: /home/app/test-public-key.pem
+  CERT_PATH_PUBLIC: /home/app/test-public-key.pem
+  REDIS_HOST: valkey
+  REDIS_PORT: "6379"
+  DB_HOST: postgresql
+  CONFIGURATION_DATABASE: configuration
+  CONFIGURATION_DATABASE_USER: postgres
+  DYNAMIC_HISTORY_DB_HOST: postgresql
+  DYNAMIC_HISTORY_DB_PORT: "5432"
+  DYNAMIC_HISTORY_DB_NAME: raw_history
+  DYNAMIC_HISTORY_DB_USER: postgres
+  EVENT_HISTORY_DB_HOST: postgresql
+  EVENT_HISTORY_DB_PORT: "5432"
+  EVENT_HISTORY_DB_NAME: event_history
+  EVENT_HISTORY_DB_USER: postgres
+  CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173,http://connection-studio-frontend:5173
+  APM_ACTIVE: "false"
+volumeMounts:
+  - name: auth-keys
+    mountPath: /home/app/test-public-key.pem
+    subPath: public.pem
+    readOnly: true
+volumes:
+  - name: auth-keys
+    secret:
+      secretName: tazama-auth-keys

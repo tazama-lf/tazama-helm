@@ -19,11 +19,30 @@ env:
   NODE_ENV: dev
   MAX_CPU: "2"
   PORT: "3001"
+  SIZE: 200mb
   POSTGRES_DB: enrichment
   POSTGRES_USER: postgres
   POSTGRES_PORT: "5432"
+  DB_PORT: "5432"
   STARTUP_TYPE: nats
   PRODUCER_STREAM: enrichment.notification.response
   CONSUMER_STREAM: enrichment.notification
   STREAM_SUBJECT: enrichment.notification
   REDIS_PORT: "6379"
+  CACHE_TTL: "7200"
+  BATCH_SIZE: "1000"
+  ENCRYPTION_KEY: 8fj29dkd82hs91kd93kd82hs91kd83ks
+  SALT_ROUNDS: "10"
+  TAZAMA_AUTH_URL: http://auth-service:3020/v1/auth
+  AUTH_PUBLIC_KEY_PATH: /home/app/test-public-key.pem
+  CERT_PATH_PUBLIC: /home/app/test-public-key.pem
+  CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173,http://connection-studio-frontend:5173
+volumeMounts:
+  - name: auth-keys
+    mountPath: /home/app/test-public-key.pem
+    subPath: public.pem
+    readOnly: true
+volumes:
+  - name: auth-keys
+    secret:
+      secretName: tazama-auth-keys

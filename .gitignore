@@ -8,3 +8,17 @@ charts/**/charts/
 .helmfile/
 .DS_Store
 Thumbs.db
+
+# AWS k3s test cluster (OpenTofu)
+infra/aws/.terraform/
+infra/aws/*.tfstate
+infra/aws/*.tfstate.*
+infra/aws/tfplan
+infra/aws/terraform.tfvars
+infra/aws/id_rsa
+infra/aws/id_rsa.pub
+infra/aws/kubeconfig.yaml
+infra/aws/crash.log
+infra/aws/*.auto.tfvars
+infra/aws/*.auto.tfvars
+infra/aws/.terraform.tfstate.lock.info

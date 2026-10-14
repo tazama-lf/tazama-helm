@@ -17,4 +17,6 @@ startupChecks:
   nats: false
 env:
   SPRING_DATASOURCE_DRIVER: org.postgresql.Driver
+  SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
   SPRING_DATASOURCE_USERNAME: postgres
+  JAVA_TOOL_OPTIONS: -Xms256m -Xmx768m

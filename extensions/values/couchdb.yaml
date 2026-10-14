@@ -18,6 +18,40 @@ persistence:
   enabled: true
   size: 10Gi
   mountPath: /opt/couchdb/data
+# Official image runs as uid 5984. Default chart fsGroup 1000 makes the PVC
+# unwritable and CouchDB exits before it can log to stdout.
+podSecurityContext:
+  fsGroup: 5984
+  runAsUser: 5984
+  runAsGroup: 5984
+securityContext:
+  runAsUser: 5984
+  runAsGroup: 5984
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
 env:
   COUCHDB_USER: admin
   COUCHDB_PASSWORD: unused
+  NODENAME: "127.0.0.1"
+command:
+  - /bin/bash
+  - -c
+  - |
+    set -euo pipefail
+    mkdir -p /opt/couchdb/etc/local.d
+    cat > /opt/couchdb/etc/local.d/k8s.ini <<'EOF'
+    [couchdb]
+    single_node=true
+    [chttpd]
+    bind_address = 0.0.0.0
+    port = 5984
+    [cluster]
+    n = 1
+    q = 8
+    [log]
+    writer = stdout
+    level = info
+    EOF
+    exec /docker-entrypoint.sh /opt/couchdb/bin/couchdb

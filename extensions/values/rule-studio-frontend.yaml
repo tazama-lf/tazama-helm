@@ -12,3 +12,9 @@ startupChecks:
   enabled: false
 env:
   VITE_APP_NAME: Model Management
+  VITE_API_URL: http://rule-studio-backend:3005
+  VITE_ALLOWED_HOSTS: all
+  NODE_ENV: production
+  CHOKIDAR_USEPOLLING: "true"
+  WATCHPACK_POLLING: "true"
+  CI: "true"

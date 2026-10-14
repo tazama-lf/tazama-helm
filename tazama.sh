@@ -9,7 +9,7 @@ usage() {
   cat <<'EOF'
 Usage: ./tazama.sh <command> [profile] [cloud] [selector] [flags]
 
-Commands: apply | destroy | status | diff | template | lint | sync | secrets
+Commands: apply | destroy | status | diff | template | lint | sync | secrets | configure
 Profiles: core | full | private-rules
           (member is an alias for private-rules; dockerhub is an alias for full)
 Clouds:   onprem | eks | gke | aks
@@ -25,6 +25,7 @@ Database flags: --postgresql-host|--postgresql-replica-host VALUE
 Ingress flags:  --ingress --ingress-domain DOMAIN [--ingress-class NAME]
                 [--ingress-service-type LoadBalancer|NodePort]
 Selector:       --selector LABEL   (or a positional label such as name=tms-service)
+Configure:      --tms-config-path DIR --admin-url URL --newman --truncate --auth --skip-restart
 EOF
 }
 
@@ -64,6 +65,12 @@ INGRESS_DOMAIN=""
 INGRESS_CLASS=""
 INGRESS_SERVICE_TYPE=""
 GENERATE_SECRETS=0
+TMS_CONFIG_PATH=""
+ADMIN_URL_FLAG=""
+NEWMAN=0
+TRUNCATE=0
+AUTH_FLAG=0
+SKIP_RESTART=0
 
 need_value() {
   local flag="$1"
@@ -103,6 +110,22 @@ while [[ $# -gt 0 ]]; do
     --biar) BIAR=1; shift ;;
     --postgres-replica) POSTGRES_REPLICA=1; shift ;;
     --generate-secrets) GENERATE_SECRETS=1; shift ;;
+    --tms-config-path)
+      need_value "$arg" "${2:-}"
+      TMS_CONFIG_PATH="$2"
+      shift 2
+      ;;
+    --tms-config-path=*) TMS_CONFIG_PATH="${arg#*=}"; shift ;;
+    --admin-url)
+      need_value "$arg" "${2:-}"
+      ADMIN_URL_FLAG="$2"
+      shift 2
+      ;;
+    --admin-url=*) ADMIN_URL_FLAG="${arg#*=}"; shift ;;
+    --newman) NEWMAN=1; shift ;;
+    --truncate) TRUNCATE=1; shift ;;
+    --auth) AUTH_FLAG=1; shift ;;
+    --skip-restart) SKIP_RESTART=1; shift ;;
     --relay-efrup)
       need_value "$arg" "${2:-}"
       RELAY_EFRUP="$2"
@@ -215,7 +238,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$COMMAND" in
-  apply|destroy|status|diff|template|lint|sync) ;;
+  apply|destroy|status|diff|template|lint|sync|secrets|configure) ;;
   *)
     echo "Unknown command: $COMMAND" >&2
     usage >&2
@@ -275,7 +298,7 @@ fi
 export TAZAMA_CLOUD="$CLOUD"
 export TAZAMA_SIZING="$SIZING"
 
-if [[ "$COMMAND" != "secrets" ]]; then
+if [[ "$COMMAND" != "secrets" && "$COMMAND" != "configure" ]]; then
   if ! command -v helmfile >/dev/null 2>&1; then
     echo "helmfile is not on PATH. Install https://github.com/helmfile/helmfile/releases and retry." >&2
     exit 1
@@ -398,6 +421,205 @@ ensure_auth_keys "$GENERATE_SECRETS"
 if [[ "$COMMAND" == "secrets" ]]; then
   echo "Secrets written to values/secrets.yaml (gitignored). Each install gets its own 20-character URL-safe secrets. Do not commit that file."
   echo "Kubernetes Secret objects encode the same strings again. Keep plaintext in the YAML. Do not paste kubectl base64 data back into this file."
+  exit 0
+fi
+
+resolve_tms_config() {
+  local dir marker
+  local candidates=()
+  if [[ -n "$TMS_CONFIG_PATH" ]]; then
+    candidates+=("$TMS_CONFIG_PATH")
+  fi
+  if [[ -n "${TAZAMA_TMS_CONFIG:-}" ]]; then
+    candidates+=("$TAZAMA_TMS_CONFIG")
+  fi
+  candidates+=("$ROOT/../tms-configuration" "$ROOT/../tms-configuration-main")
+  for dir in "${candidates[@]}"; do
+    [[ -z "$dir" ]] && continue
+    marker="$dir/curl/rule-configs.json"
+    if [[ -f "$marker" ]]; then
+      cd "$dir"
+      pwd
+      cd "$ROOT"
+      return 0
+    fi
+  done
+  echo "tms-configuration was not found. Clone the private repo (GitHub access required) next to tazama-Helms, or pass --tms-config-path / set TAZAMA_TMS_CONFIG." >&2
+  echo "  git clone https://github.com/frmscoe/tms-configuration" >&2
+  echo "This wrapper does not vendor that repo. The collection and curl payloads stay in the private clone." >&2
+  exit 1
+}
+
+wait_tcp() {
+  local host="$1" port="$2" seconds="${3:-30}" i
+  for ((i=0; i<seconds*4; i++)); do
+    if command -v nc >/dev/null 2>&1; then
+      if nc -z "$host" "$port" >/dev/null 2>&1; then
+        return 0
+      fi
+    elif command -v timeout >/dev/null 2>&1; then
+      if timeout 1 bash -c "echo >/dev/tcp/$host/$port" >/dev/null 2>&1; then
+        return 0
+      fi
+    else
+      if bash -c "echo >/dev/tcp/$host/$port" >/dev/null 2>&1; then
+        return 0
+      fi
+    fi
+    sleep 0.25
+  done
+  echo "Timed out waiting for ${host}:${port}." >&2
+  exit 1
+}
+
+admin_post() {
+  local url="$1" data="$2" token="${3:-}"
+  local args=(-sS -o /tmp/tazama-admin-body -w "%{http_code}" -X POST "$url" -H "Content-Type: application/json")
+  if [[ -n "$token" ]]; then
+    args+=(-H "Authorization: Bearer $token")
+  fi
+  if [[ -f "$data" ]]; then
+    args+=(--data-binary @"$data")
+  else
+    args+=(-d "$data")
+  fi
+  local code
+  code="$(curl "${args[@]}")"
+  echo "  $code $url"
+  if [[ "$code" -lt 200 || "$code" -ge 300 ]]; then
+    echo "admin-service returned $code for $url." >&2
+    cat /tmp/tazama-admin-body >&2 || true
+    exit 1
+  fi
+}
+
+run_configure() {
+  if ! command -v kubectl >/dev/null 2>&1; then
+    echo "kubectl is not on PATH. Install https://kubernetes.io/docs/tasks/tools/ and retry." >&2
+    exit 1
+  fi
+  local config_root admin_base token=""
+  config_root="$(resolve_tms_config)"
+  admin_base="${ADMIN_URL_FLAG:-${ADMIN_URL:-http://localhost:5100}}"
+  admin_base="${admin_base%/}"
+  local pf_pids=()
+  cleanup_pf() {
+    local pid
+    for pid in "${pf_pids[@]:-}"; do
+      kill "$pid" >/dev/null 2>&1 || true
+    done
+  }
+  trap cleanup_pf EXIT
+
+  echo "Loading TMS configuration from $config_root"
+  echo "admin-service: $admin_base"
+  if [[ "$NEWMAN" -eq 1 ]]; then
+    echo "Runner: Newman (Admin-Service API v4.0.0 folder)"
+  else
+    echo "Runner: curl payloads (same inject as the Postman Admin-Service API folder)"
+  fi
+
+  if [[ "$admin_base" == *localhost* || "$admin_base" == *127.0.0.1* ]]; then
+    echo "Port-forwarding svc/admin-service 5100:5100 ..."
+    kubectl port-forward -n tazama svc/admin-service 5100:5100 >/dev/null 2>&1 &
+    pf_pids+=("$!")
+    wait_tcp 127.0.0.1 5100
+  fi
+  if [[ "$AUTH_FLAG" -eq 1 ]]; then
+    echo "Port-forwarding Keycloak and Auth for a bearer token ..."
+    kubectl port-forward -n tazama svc/keycloak 8080:8080 >/dev/null 2>&1 &
+    pf_pids+=("$!")
+    kubectl port-forward -n tazama svc/auth-service 3020:3020 >/dev/null 2>&1 &
+    pf_pids+=("$!")
+    wait_tcp 127.0.0.1 8080
+    wait_tcp 127.0.0.1 3020
+    local kc
+    kc="$(curl -sS -X POST "http://localhost:8080/realms/tazama/protocol/openid-connect/token" \
+      -H "Content-Type: application/x-www-form-urlencoded" \
+      -d "client_id=auth-lib-client" \
+      -d "client_secret=auth-lib-client-test-secret" \
+      -d "username=tazama-user@tazama.org" \
+      -d "password=password" \
+      -d "grant_type=password" | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')"
+    token="$(curl -sS -X POST "http://localhost:3020/v1/auth/login" \
+      -H "Authorization: Bearer $kc" \
+      -H "Content-Type: application/json" \
+      -d '{"username":"tazama-user@tazama.org","password":"password"}')"
+  fi
+
+  if [[ "$TRUNCATE" -eq 1 ]]; then
+    echo "Truncating configuration.rule, typology, network_map ..."
+    kubectl exec -n tazama postgresql-0 -- psql -U postgres -d configuration -c "TRUNCATE TABLE rule, typology, network_map;"
+  fi
+
+  if [[ "$NEWMAN" -eq 1 ]]; then
+    if ! command -v newman >/dev/null 2>&1; then
+      echo "newman is not on PATH. Install Newman: npm install -g newman" >&2
+      exit 1
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+      echo "python3 is required to extract the Admin-Service API / v4.0.0 folder." >&2
+      exit 1
+    fi
+    local collection work slim envf host_part
+    collection="$config_root/postman/tms-configuration.postman_collection.json"
+    if [[ ! -f "$collection" ]]; then
+      echo "Postman collection not found at $collection" >&2
+      exit 1
+    fi
+    work="$(mktemp -d)"
+    slim="$work/admin-v4.postman_collection.json"
+    envf="$work/tazama-k8s.postman_environment.json"
+    python3 - "$collection" "$slim" <<'PY'
+import json, sys
+src, dest = sys.argv[1], sys.argv[2]
+raw = json.load(open(src, encoding="utf-8"))
+admin = next((i for i in raw.get("item", []) if i.get("name") == "Admin-Service API"), None)
+if not admin:
+    raise SystemExit("Collection has no 'Admin-Service API' folder. Do not run the Hasura API folder on this stack.")
+v4 = next((i for i in admin.get("item", []) if i.get("name") == "v4.0.0"), None)
+if not v4:
+    raise SystemExit("Collection has no Admin-Service API / v4.0.0 folder.")
+json.dump({"info": raw.get("info", {}), "item": [v4]}, open(dest, "w", encoding="utf-8"))
+PY
+    host_part="${admin_base#http://}"
+    host_part="${host_part#https://}"
+    python3 - "$envf" "$host_part" <<'PY'
+import json, sys
+path, host = sys.argv[1], sys.argv[2]
+json.dump({
+    "id": "tazama-k8s",
+    "name": "tazama-k8s",
+    "values": [
+        {"key": "tazamaAdminUrl", "value": host, "enabled": True},
+        {"key": "path-admin-api-version", "value": "/v1", "enabled": True},
+        {"key": "tazamaAuthUrl", "value": "localhost:3020", "enabled": True},
+        {"key": "path-auth-api-version", "value": "/v1", "enabled": True},
+        {"key": "keycloakUrl", "value": "localhost:8080", "enabled": True},
+        {"key": "activePain001", "value": "false", "enabled": True},
+    ],
+}, open(path, "w", encoding="utf-8"))
+PY
+    echo "Running Newman against Admin-Service API / v4.0.0 only (Hasura folder skipped)."
+    newman run "$slim" -e "$envf" --timeout-request 120000 --delay-request 200
+    rm -rf "$work"
+  else
+    admin_post "$admin_base/v1/admin/configuration/rule" "$config_root/curl/rule-configs.json" "$token"
+    admin_post "$admin_base/v1/admin/configuration/typology" "$config_root/curl/typology-configs.json" "$token"
+    admin_post "$admin_base/v1/admin/configuration/network_map" "$config_root/curl/network-map.json" "$token"
+    admin_post "$admin_base/v1/admin/configuration/network_map/4.0.0/activate" '{"reloadMode":"cascade"}' "$token"
+  fi
+
+  if [[ "$SKIP_RESTART" -eq 0 ]]; then
+    echo "Restarting event-director, typology-processor, event-adjudicator ..."
+    kubectl rollout restart -n tazama deploy/event-director deploy/typology-processor deploy/event-adjudicator
+    kubectl rollout status -n tazama deploy/event-director --timeout=180s
+  fi
+  echo "Configuration loaded. Processors will pick up the active network map after the rollout."
+}
+
+if [[ "$COMMAND" == "configure" ]]; then
+  run_configure
   exit 0
 fi
 

@@ -166,6 +166,21 @@ To delete the sandbox later: `kind delete cluster --name tazama-cluster`.
 
 Enable Kubernetes in Docker Desktop, or use any cluster whose StorageClass can bind PVCs. Point `kubectl` at it, then use `-Cloud onprem`. You do not run `kind create cluster`.
 
+#### AWS k3s on one EC2 (OpenTofu, not EKS)
+
+Disposable test cluster: one EC2 running k3s, SSH, and a kubeconfig for Lens. From this repo:
+
+```powershell
+.\infra\aws\up.cmd -Sizing medium -AwsProfile tazama
+$env:KUBECONFIG = "$PWD\infra\aws\kubeconfig.yaml"
+.\tazama.cmd sync -Profile core -Cloud onprem -Sizing medium
+.\infra\aws\down.cmd
+```
+
+`-Sizing small|medium|large` sets both the EC2 type (`t3.medium` / `t3.large` / `t3.xlarge`) and the Helm replica tier. Use the same value on `up.cmd` and `tazama.cmd`.
+
+OpenTofu uses the AWS CLI credentials already on your laptop (`aws configure` / `aws sts get-caller-identity`). SSH uses a generated `id_rsa`. Lens uses the copied `kubeconfig.yaml`. Details: [infra/aws/README.md](infra/aws/README.md). Use `-Cloud onprem` (k3s local-path). This is not Elastic Kubernetes Service.
+
 #### Amazon EKS, Google GKE, Azure AKS (shared or production)
 
 Create the managed cluster with your usual cloud process (eksctl, gcloud, az, Terraform). Install the disk CSI driver if the cluster does not already have it (EKS: EBS CSI and a `gp3` StorageClass; GKE: `standard-rwo` or `premium-rwo`; AKS: `managed-csi`). Authenticate so `kubectl get nodes` lists those nodes.
@@ -444,7 +459,19 @@ The `full` profile also turns on OpenSearch, CouchDB, and Flowable. Those suppor
 
 Core already ships a sample network map (rules 901/902 on `pacs.002.001.12`, tenant `DEFAULT`) via Postgres init SQL. That is enough to prove TMS is up. A full typology set (pacs.008 plus pacs.002, public rules) is loaded through **admin-service**. This stack does not include Hasura.
 
-Follow the Admin-Service API steps in [tms-configuration](https://github.com/frmscoe/tms-configuration) (`curl/` payloads). Clone that repo next to this one (or anywhere you can run `curl` from).
+Follow the Admin-Service API steps in [tms-configuration](https://github.com/frmscoe/tms-configuration). That repo is **private**. Clone it with your GitHub access next to this folder. The wrapper does not vendor the collection or the `curl/` payloads.
+
+```powershell
+.\tazama.cmd configure
+```
+
+```bash
+./tazama.sh configure
+```
+
+That command finds `../tms-configuration` (or `../tms-configuration-main`, or `-TmsConfigPath` / `--tms-config-path`, or `TAZAMA_TMS_CONFIG`), port-forwards `admin-service` when the URL is localhost, POSTs the `curl/` payloads, activates network map `4.0.0`, and restarts Event Director, Typology Processor, and Event Adjudicator. Add `-Truncate` / `--truncate` to clear the sample 901/902 rows first. Add `-Newman` / `--newman` to run the collection's **Admin-Service API / v4.0.0** folder instead of the `curl/` files. Do not run the Hasura API folder against this stack.
+
+Manual `curl` steps below are the same inject if you prefer to run them yourself.
 
 ### Reach admin-service
 
@@ -1050,6 +1077,7 @@ Wrapper arguments: PowerShell uses `-Profile`, `-Cloud`, `-Selector`, and the fl
 | Overlay tests (Floci) | `.\test\test-floci.ps1` | `./test/test-floci.sh` |
 | Overlay render (no cluster) | `.\test\test-clouds.ps1` | `./test/test-clouds.sh` |
 | Generate unique secrets only (no cluster) | `.\tazama.cmd secrets` | `./tazama.sh secrets` |
+| Load TMS config from a local tms-configuration clone | `.\tazama.cmd configure` | `./tazama.sh configure` |
 | Preview the diff | `.\tazama.cmd diff -Profile core -Cloud onprem` | `./tazama.sh diff core onprem` |
 | Render YAML | `.\tazama.cmd template -Profile core -Cloud onprem -Cms` | `./tazama.sh template core onprem --cms` |
 | Status | `.\tazama.cmd status -Profile core -Cloud onprem` | `./tazama.sh status core onprem` |

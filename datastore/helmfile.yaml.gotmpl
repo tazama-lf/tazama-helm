@@ -83,13 +83,119 @@ releases:
             BEGIN
               IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'replicator') THEN
                 CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD '{{ .Values.secrets.postgres.replicationPassword | default .Values.secrets.postgres.password }}';
+              ELSE
+                ALTER ROLE replicator WITH REPLICATION LOGIN PASSWORD '{{ .Values.secrets.postgres.replicationPassword | default .Values.secrets.postgres.password }}';
               END IF;
             END
             $$;
             EOSQL
-            if ! grep -q "replication replicator" "$PGDATA/pg_hba.conf"; then
-              echo "host replication replicator all scram-sha-256" >> "$PGDATA/pg_hba.conf"
-            fi
+            HBA="$PGDATA/pg_hba.conf"
+            # pg_basebackup from another pod is TCP without SSL. `host all` does
+            # not match replication connections. Init scripts only run once, so
+            # extraContainers also keep these lines present after upgrades.
+            for line in \
+              "hostnossl replication replicator 0.0.0.0/0 scram-sha-256" \
+              "hostnossl replication replicator ::/0 scram-sha-256" \
+              "hostssl replication replicator 0.0.0.0/0 scram-sha-256" \
+              "hostssl replication replicator ::/0 scram-sha-256" \
+              "host replication replicator 0.0.0.0/0 scram-sha-256" \
+              "host replication replicator ::/0 scram-sha-256"; do
+              grep -qxF "$line" "$HBA" || echo "$line" >> "$HBA"
+            done
+            psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" -c "SELECT pg_reload_conf();"
+        extraContainers:
+          - name: tazama-schema
+            image: {{ printf "postgres:%s" (.Values.postgres.imageTag | default "18") | quote }}
+            imagePullPolicy: IfNotPresent
+            securityContext:
+              allowPrivilegeEscalation: false
+              runAsNonRoot: true
+              runAsUser: 999
+              runAsGroup: 999
+              capabilities:
+                drop:
+                  - ALL
+            env:
+              - name: PGUSER
+                value: {{ .Values.secrets.postgres.username | quote }}
+              - name: PGPASSWORD
+                value: {{ .Values.secrets.postgres.password | quote }}
+            command:
+              - bash
+              - -c
+              - |
+                set -eu
+                until pg_isready -h 127.0.0.1 -U "$PGUSER" >/dev/null 2>&1; do
+                  sleep 2
+                done
+                for f in /sql/20-*.sql /sql/21-*.sql; do
+                  if [ -f "$f" ]; then
+                    echo "applying $f"
+                    psql -h 127.0.0.1 -U "$PGUSER" -v ON_ERROR_STOP=1 -f "$f"
+                  fi
+                done
+                echo "tazama schema applied"
+                while true; do sleep 3600; done
+            volumeMounts:
+              - name: extrascripts-volume
+                mountPath: /sql
+                readOnly: true
+{{- if .Values.install.postgresqlReplica }}
+          - name: replication-hba
+            image: {{ printf "postgres:%s" (.Values.postgres.imageTag | default "18") | quote }}
+            imagePullPolicy: IfNotPresent
+            securityContext:
+              allowPrivilegeEscalation: false
+              runAsNonRoot: true
+              runAsUser: 999
+              runAsGroup: 999
+              capabilities:
+                drop:
+                  - ALL
+            env:
+              - name: PGDATA
+                value: /var/lib/postgresql/data/pg
+              - name: PGUSER
+                value: {{ .Values.secrets.postgres.username | quote }}
+              - name: PGPASSWORD
+                value: {{ .Values.secrets.postgres.password | quote }}
+              - name: REPLICATION_PASSWORD
+                value: {{ .Values.secrets.postgres.replicationPassword | default .Values.secrets.postgres.password | quote }}
+            command:
+              - bash
+              - -c
+              - |
+                set -eu
+                HBA="$PGDATA/pg_hba.conf"
+                while true; do
+                  if pg_isready -h 127.0.0.1 -p 5432 >/dev/null 2>&1 && [ -f "$HBA" ]; then
+                    psql -h 127.0.0.1 -p 5432 -d postgres -v ON_ERROR_STOP=1 \
+                      -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'replicator') THEN CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD '${REPLICATION_PASSWORD}'; ELSE ALTER ROLE replicator WITH REPLICATION LOGIN PASSWORD '${REPLICATION_PASSWORD}'; END IF; END \$\$;" \
+                      >/dev/null
+                    changed=0
+                    for line in \
+                      "hostnossl replication replicator 0.0.0.0/0 scram-sha-256" \
+                      "hostnossl replication replicator ::/0 scram-sha-256" \
+                      "hostssl replication replicator 0.0.0.0/0 scram-sha-256" \
+                      "hostssl replication replicator ::/0 scram-sha-256" \
+                      "host replication replicator 0.0.0.0/0 scram-sha-256" \
+                      "host replication replicator ::/0 scram-sha-256"; do
+                      if ! grep -qxF "$line" "$HBA"; then
+                        echo "$line" >> "$HBA"
+                        changed=1
+                      fi
+                    done
+                    if [ "$changed" = 1 ]; then
+                      psql -h 127.0.0.1 -p 5432 -d postgres -c "SELECT pg_reload_conf();" >/dev/null
+                      echo "replication pg_hba reloaded"
+                    fi
+                  fi
+                  sleep 10
+                done
+            volumeMounts:
+              - name: postgres-data
+                mountPath: /var/lib/postgresql/data
+{{- end }}
 
   - name: postgresql-replica
     namespace: {{ .Values.namespace }}
@@ -132,6 +238,8 @@ releases:
             env:
               - name: PGPASSWORD
                 value: {{ .Values.secrets.postgres.replicationPassword | default .Values.secrets.postgres.password | quote }}
+              - name: PGSSLMODE
+                value: prefer
               - name: PRIMARY_HOST
                 value: postgresql
             command:
