@@ -1,0 +1,75 @@
+# SPDX-License-Identifier: Apache-2.0
+name: cms-backend
+fullnameOverride: cms-backend
+replicaCount: 1
+service:
+  enabled: true
+  port: 3090
+  targetPort: 3090
+probes:
+  enabled: true
+  path: /
+  port: http
+startupChecks:
+  postgres: true
+  valkey: true
+  nats: true
+env:
+  FUNCTION_NAME: case-management-service
+  NODE_ENV: dev
+  MAX_CPU: "1"
+  PORT: "3090"
+  POSTGRES_DB: tazama_cms
+  POSTGRES_USER: postgres
+  POSTGRES_PORT: "5432"
+  TRIAGE_TYPE: MANUAL
+  AUTHENTICATED: "false"
+  STARTUP_TYPE: nats
+  CONSUMER_STREAM: investigation-service
+  PRODUCER_STREAM: default
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  TAZAMA_AUTH_URL: http://auth-service:3020/v1/auth
+  AUTH_PUBLIC_KEY_PATH: /home/app/test-public-key.pem
+  CERT_PATH_PUBLIC: /home/app/test-public-key.pem
+  SYSTEM_UUID: a9a8ff94-c7e4-4e6c-b421-e6d5d75a76e1
+  CLIENT_SYSTEM_INTERDICTION_ENABLED: "true"
+  KEYCLOAK_GROUP_NAME: tazama-cms
+  CONFIDENCE_THRESHOLD: "95"
+  PRIORITY_FIRST_HALF: "0.33"
+  PRIORITY_SECOND_HALF: "0.66"
+  PRIORITY_THIRD_HALF: "1.0"
+  DEFAULT_SLA_HOURS: "72"
+  ALERT_PRIORITY_CRON_SCHEDULE: "0 * * * *"
+  AUTO_ASSIGNMENT_ENABLED: "false"
+  FLOWABLE_URL: http://flowable:8080/flowable-rest
+  FLOWABLE_USERNAME: rest-admin
+  FLOWABLE_PASSWORD: test
+  COUCHDB_URL: http://couchdb:5984
+  COUCHDB_DATABASE: cms-evidence
+  COUCHDB_USER: admin
+  COUCHDB_USERNAME: admin
+  COUCHDB_PASSWORD: unused
+  AUDIT_PROVIDER: opensearch
+  OPENSEARCH_NODE: http://opensearch:9200
+  OPENSEARCH_USERNAME: admin
+  OPENSEARCH_PASSWORD: admin
+  OPENSEARCH_SSL_REJECT_UNAUTHORIZED: "false"
+  OPENSEARCH_REFRESH: "true"
+  SESSION_COOKIE_SECURE: "false"
+  SESSION_COOKIE_SAMESITE: lax
+  CORS_ALLOWED_ORIGINS: http://localhost:5175,http://127.0.0.1:5175,http://cms-frontend:5175
+  VOILA_URL: http://cms-frontend:5175
+  VOILA_BASE_URL: http://cms-frontend:5175
+  CMS_FRONTEND_ORIGIN: http://cms-frontend:5175
+  GOLD_LAKEHOUSE_API_URL: http://cms-frontend:5175
+  GOLD_LAKEHOUSE_TIMEOUT: "120000"
+volumeMounts:
+  - name: auth-keys
+    mountPath: /home/app/test-public-key.pem
+    subPath: public.pem
+    readOnly: true
+volumes:
+  - name: auth-keys
+    secret:
+      secretName: tazama-auth-keys

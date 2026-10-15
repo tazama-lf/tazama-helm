@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# Amazon EKS. Requires the AWS EBS CSI driver and a gp3 StorageClass.
+# Optional: AWS Load Balancer Controller for NLB annotations.
+
+cloud: eks
+storageClass: gp3
+workerOnly: false
+
+install:
+  ingressNginx: true
+
+ingress:
+  enabled: true
+  className: nginx
+  domain: tazama.example.com
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 50m
+
+ingressNginx:
+  serviceType: LoadBalancer
+  serviceAnnotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb
+    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+
+valkey:
+  replicaEnabled: true
+  replicas: 1
+
+postgres:
+  persistenceSize: 20Gi

@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: Apache-2.0
+name: auth-service
+fullnameOverride: auth-service
+replicaCount: 1
+service:
+  enabled: true
+  port: 3020
+  targetPort: 3020
+probes:
+  enabled: true
+  path: /
+  port: http
+  initialDelaySeconds: 20
+  periodSeconds: 10
+  failureThreshold: 18
+startupChecks:
+  postgres: false
+  valkey: false
+  nats: false
+volumeMounts:
+  - name: auth-keys
+    mountPath: /home/app/test-private-key.pem
+    subPath: private.pem
+    readOnly: true
+  - name: auth-keys
+    mountPath: /home/app/test-public-key.pem
+    subPath: public.pem
+    readOnly: true
+volumes:
+  - name: auth-keys
+    secret:
+      secretName: tazama-auth-keys
+env:
+  FUNCTION_NAME: auth-service
+  NODE_ENV: dev
+  MAX_CPU: "1"
+  HOST: 0.0.0.0
+  PORT: "3020"
+  AUTH_PROVIDER: "@tazama-lf/auth-lib-provider-keycloak"
+  CERT_PATH_PRIVATE: test-private-key.pem
+  CERT_PATH_PUBLIC: test-public-key.pem
+  KEYCLOAK_REALM: tazama
+  CLIENT_ID: auth-lib-client
+  LOG_LEVEL: info

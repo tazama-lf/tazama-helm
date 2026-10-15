@@ -1,0 +1,93 @@
+# SPDX-License-Identifier: Apache-2.0
+name: app
+fullnameOverride: ""
+replicaCount: 1
+kind: Deployment
+
+image:
+  repository: tazamaorg/tms-service
+  tag: rc
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: false
+  name: ""
+  automount: false
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 3000
+  targetPort: 3000
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts: []
+  tls: []
+
+env: {}
+extraEnv: []
+envFromSecret: ""
+command: []
+args: []
+
+volumeMounts: []
+volumes: []
+
+persistence:
+  enabled: false
+  size: 10Gi
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  mountPath: /data
+
+startupChecks:
+  enabled: true
+  postgres: true
+  valkey: true
+  nats: true
+  postgresImage: postgres:16
+  busyboxImage: busybox:1.36
+  schemaDatabase: raw_history
+  schemaTable: pain013
+
+hosts:
+  postgresql: postgresql
+  valkey: valkey
+  nats: nats
+
+credentialsSecretName: tazama-credentials
+postgresUserKey: POSTGRES_USER
+postgresPasswordKey: POSTGRES_PASSWORD
+
+probes:
+  enabled: false
+  path: /
+  port: http
+  initialDelaySeconds: 20
+  periodSeconds: 10
+  failureThreshold: 12
+
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+workerOnly: false
+podAnnotations: {}
+commonLabels: {}

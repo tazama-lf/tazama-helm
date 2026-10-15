@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Small tier. Scaled-down shape of the "$1,000 / 45 TPS" row in
+# tazama-lf/docs Technical/Environment-Setup/Infrastructure/
+# Infrastructure-Spec-For-Tazama.md.
+#
+# Reference row (TMS 12, CRSP 10, TP 70, TADP 35, 1 pod per rule) is the
+# measured spec. These numbers keep the same ratio (Typology Processor is the
+# hot path, Event Adjudicator next) at roughly a sixth of the pod count so it
+# still fits a modest cluster. Raise them once you have load figures of your own.
+#
+# Spec name -> release: CRSP = event-director, TADP = event-adjudicator
+# (and event-flow), REDIS = valkey, Arango = Postgres.
+
+sizing: small
+
+replicas:
+  tms: 2
+  admin: 1
+  eventDirector: 2
+  eventFlow: 2
+  typologyProcessor: 6
+  eventAdjudicator: 3
+  auth: 1
+  keycloak: 1
+  relay: 1
+  rules: 1
+
+postgres:
+  maxConnections: 400

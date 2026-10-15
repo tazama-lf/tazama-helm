@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+# Azure Kubernetes Service. managed-csi is the current default CSI class.
+
+cloud: aks
+storageClass: managed-csi
+workerOnly: false
+
+install:
+  ingressNginx: true
+
+ingress:
+  enabled: true
+  className: nginx
+  domain: tazama.example.com
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 50m
+
+ingressNginx:
+  serviceType: LoadBalancer
+  serviceAnnotations:
+    service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: /healthz
+
+valkey:
+  replicaEnabled: true
+  replicas: 1
+
+postgres:
+  persistenceSize: 20Gi

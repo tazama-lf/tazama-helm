@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+name: event-director
+fullnameOverride: event-director
+replicaCount: 1
+service:
+  enabled: true
+  port: 3000
+  targetPort: 3000
+probes:
+  enabled: false
+startupChecks:
+  postgres: true
+  valkey: true
+  nats: true
+env:
+  FUNCTION_NAME: event-director
+  MAX_CPU: "1"
+  PORT: "3000"
+  NODE_ENV: dev
+  APM_SERVICE_NAME: event-director
+  APM_ACTIVE: "false"
+  REDIS_DATABASE: "0"
+  REDIS_IS_CLUSTER: "false"
+  DISTRIBUTED_CACHETTL: "300"
+  DISTRIBUTED_CACHE_ENABLED: "false"
+  LOCAL_CACHETTL: "300"
+  LOCAL_CACHE_ENABLED: "false"
+  CONFIGURATION_DATABASE: configuration
+  CONFIGURATION_DATABASE_USER: postgres
+  LOG_LEVEL: info
+  STARTUP_TYPE: nats
+  CONSUMER_STREAM: event-director
+  SERVICE_CHANNEL_CONSUMER: service-channel
+  SERVICE_CHANNEL_PRODUCER: service-channel-ack
+  SERVICE_CHANNEL_CLASS: event-director

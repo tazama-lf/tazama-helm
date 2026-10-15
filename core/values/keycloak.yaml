@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: Apache-2.0
+name: keycloak
+fullnameOverride: keycloak
+replicaCount: 1
+image:
+  repository: quay.io/keycloak/keycloak
+  tag: "23.0.6"
+  pullPolicy: IfNotPresent
+args:
+  - start
+  - --import-realm
+  - --http-enabled=true
+  - --health-enabled=true
+service:
+  enabled: true
+  port: 8080
+  targetPort: 8080
+probes:
+  enabled: true
+  path: /health/ready
+  port: http
+  initialDelaySeconds: 40
+  periodSeconds: 10
+  failureThreshold: 36
+startupChecks:
+  enabled: true
+  postgres: true
+  valkey: false
+  nats: false
+  schemaDatabase: keycloak
+  schemaTable: pg_database
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+volumeMounts:
+  - name: realm
+    mountPath: /opt/keycloak/data/import
+    readOnly: true
+volumes:
+  - name: realm
+    configMap:
+      name: keycloak-realm
+env:
+  FUNCTION_NAME: keycloak
+  KC_HTTP_ENABLED: "true"
+  KC_HTTP_PORT: "8080"
+  KC_HEALTH_ENABLED: "true"
+  KC_HOSTNAME_STRICT: "false"
+  KC_HOSTNAME_STRICT_HTTPS: "false"
+  KC_HOSTNAME_STRICT_BACKCHANNEL: "false"
+  KC_PROXY: edge
+  KC_DB: postgres
+  KC_DB_PORT: "5432"
+  LOG_LEVEL: info

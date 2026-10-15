@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# Shared env for relay-service-ef / tp / ea. Image and destination URL are
+# set per transport in core/helmfile.yaml.gotmpl.
+replicaCount: 1
+service:
+  enabled: false
+probes:
+  enabled: false
+startupChecks:
+  postgres: false
+  valkey: false
+  nats: true
+env:
+  NODE_ENV: dev
+  MAX_CPU: "1"
+  STARTUP_TYPE: nats
+  APM_ACTIVE: "false"
+  LOG_LEVEL: info

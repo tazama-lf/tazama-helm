@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: Apache-2.0
+name: event-adjudicator
+fullnameOverride: event-adjudicator
+replicaCount: 1
+service:
+  enabled: false
+probes:
+  enabled: false
+startupChecks:
+  postgres: true
+  valkey: true
+  nats: true
+env:
+  FUNCTION_NAME: event-adjudicator
+  NODE_ENV: dev
+  MAX_CPU: "1"
+  SUPPRESS_ALERTS: "true"
+  ALERTS_ONLY: "false"
+  APM_SERVICE_NAME: event-adjudicator
+  APM_ACTIVE: "false"
+  REDIS_DATABASE: "0"
+  REDIS_IS_CLUSTER: "false"
+  DISTRIBUTED_CACHETTL: "300"
+  DISTRIBUTED_CACHE_ENABLED: "false"
+  LOCAL_CACHETTL: "300"
+  LOCAL_CACHE_ENABLED: "false"
+  RAW_HISTORY_DATABASE: raw_history
+  RAW_HISTORY_DATABASE_USER: postgres
+  CONFIGURATION_DATABASE: configuration
+  CONFIGURATION_DATABASE_USER: postgres
+  EVALUATION_DATABASE: evaluation
+  EVALUATION_DATABASE_USER: postgres
+  LOG_LEVEL: info
+  STARTUP_TYPE: nats
+  SERVICE_CHANNEL_CONSUMER: service-channel
+  SERVICE_CHANNEL_PRODUCER: service-channel-ack
+  SERVICE_CHANNEL_CLASS: event-adjudicator
+  ALERT_DESTINATION: global
+  ALERT_PRODUCER: investigation-service

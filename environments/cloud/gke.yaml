@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+# Google Kubernetes Engine. Use standard-rwo (balanced) or premium-rwo (SSD).
+
+cloud: gke
+storageClass: standard-rwo
+workerOnly: false
+
+install:
+  ingressNginx: true
+
+ingress:
+  enabled: true
+  className: nginx
+  domain: tazama.example.com
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 50m
+
+ingressNginx:
+  serviceType: LoadBalancer
+  serviceAnnotations: {}
+
+valkey:
+  replicaEnabled: true
+  replicas: 1
+
+postgres:
+  persistenceSize: 20Gi

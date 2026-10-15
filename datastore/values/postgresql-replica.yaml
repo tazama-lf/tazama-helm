@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# Streaming replica of in-cluster primary `postgresql`. Used by BIAR/NiFi.
+fullnameOverride: postgresql-replica
+service:
+  type: ClusterIP
+  port: 5432
+settings:
+  superuser:
+    value: postgres
+  superuserPassword:
+    value: unused
+  authMethod: scram-sha-256
+storage:
+  requestedSize: 10Gi
+  volumeName: postgres-data
+  accessModes:
+    - ReadWriteOnce
+  className: ""
+customConfig: |
+  hot_standby = on
+  hot_standby_feedback = on
+resources: {}
