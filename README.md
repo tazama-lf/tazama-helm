@@ -305,7 +305,21 @@ The `core` profile (`environments/core.yaml`) turns on infrastructure plus the t
 | NATS | Message bus with JetStream |
 | Valkey | In-memory cache (Redis-compatible) |
 
-Auth and Keycloak are installed even when `auth.authenticated` is `false` (the default). TMS and Admin do not require JWTs until you set that flag to `true`.
+`auth.authenticated` defaults to **true**. TMS, Admin, CMS, Connection Studio, Rule Studio, DEMS, and DEAPI all require a JWT. Auth-service and Keycloak are still installed when `install.auth` / `install.keycloak` are true. Pass `-NoAuth` / `--no-auth` only for a lab that should skip JWT checks.
+
+Keycloak `--import-realm` loads the realm JSON once, when the `tazama` realm is absent (empty Keycloak database). Default file: `charts/tazama-files/keycloak/00-tazama-test-realm.json` (demo users plus groups). `-EmptyRealm` / `--empty-realm` swaps in `00-tazama-empty-users-realm.json`: same groups, roles, and clients, but no login users. The Keycloak Admin user in the master realm and the `auth-lib-client` service account remain. Import does **not** re-run if Keycloak already has data; changing `-EmptyRealm` later needs a fresh Keycloak PVC.
+
+Top-level groups: `tazama-batch`, `tazama-cms`, `tazama-conditions`, `tazama-config`, `tazama-jupyter`, `tazama-nifi`, `tazama-reports`, `tazama-tcs`, `tazama-tms`, `tazama-trs`, plus CMS/TCS/TRS role subgroups and `tenant-001` / `tenant-002`. It does **not** create the per-domain child groups (`TAZAMA.ORG`) or `tazama-api-client@…`. Those come from the same `add-tenant` scripts as tazama-stack. After Keycloak is up:
+
+```powershell
+.\tazama.cmd tenant
+```
+
+```bash
+./tazama.sh tenant
+```
+
+That defaults to `--domain tazama.org --tenant-id TAZAMA` and creates `TAZAMA.ORG` under each service/role group (including jupyter and nifi), plus the 12 tenant users (CMS / TCS / TRS / `tazama-api-client`) with a login password. CMS users in the demo realm file have empty credentials until this runs. With `-EmptyRealm`, run `tenant` before `configure`, then pass `-AuthUser tazama-api-client@tazama.org` (demo `tazama-user` is not imported).
 
 The in-cluster Postgres replica is **off** in core. Ingress-nginx is **off** for `onprem` unless you pass `-Ingress` / `--ingress`.
 
@@ -331,6 +345,17 @@ Copy-paste recipes are in [Example installations](#example-installations).
 | Rotate dummy (or all) passwords and Auth keys in `values/secrets.yaml` | `-GenerateSecrets` | `--generate-secrets` | writes random secrets into the gitignored file |
 
 `-Cms` / `--cms` always turns on Flowable, CouchDB, and OpenSearch in the same run. You do not pass extra flags for those three.
+
+### Auth and Keycloak
+
+JWT checks are on by default (`auth.authenticated: true`). Omitted flags leave that default.
+
+| What | PowerShell | bash | Helmfile keys |
+| --- | --- | --- | --- |
+| Turn JWT checks off (lab only) | `-NoAuth` | `--no-auth` | `auth.authenticated=false` |
+| Import groups/roles with no login users | `-EmptyRealm` | `--empty-realm` | `auth.emptyRealm=true` |
+
+`-EmptyRealm` only changes the first Keycloak realm import. The master-realm Admin user still comes from `secrets.keycloak`. After that import, run `tenant` to create login users.
 
 ### Relay strings
 
@@ -469,7 +494,7 @@ Follow the Admin-Service API steps in [tms-configuration](https://github.com/frm
 ./tazama.sh configure
 ```
 
-That command finds `../tms-configuration` (or `../tms-configuration-main`, or `-TmsConfigPath` / `--tms-config-path`, or `TAZAMA_TMS_CONFIG`), port-forwards `admin-service` when the URL is localhost, POSTs the `curl/` payloads, activates network map `4.0.0`, and restarts Event Director, Typology Processor, and Event Adjudicator. Add `-Truncate` / `--truncate` to clear the sample 901/902 rows first. Add `-Newman` / `--newman` to run the collection's **Admin-Service API / v4.0.0** folder instead of the `curl/` files. Do not run the Hasura API folder against this stack.
+That command finds `../tms-configuration` (or `../tms-configuration-main`, or `-TmsConfigPath` / `--tms-config-path`, or `TAZAMA_TMS_CONFIG`), port-forwards `admin-service` when the URL is localhost, POSTs the `curl/` payloads with a JWT (default user `tazama-user@tazama.org`), activates network map `4.0.0`, and restarts Event Director, Typology Processor, and Event Adjudicator. Add `-Truncate` / `--truncate` to clear the sample 901/902 rows first. Add `-Newman` / `--newman` to run the collection's **Admin-Service API / v4.0.0** folder instead of the `curl/` files. Do not run the Hasura API folder against this stack. Pass `-SkipAuth` / `--skip-auth` only if you installed with `-NoAuth`. After `-EmptyRealm` plus `tenant`, use `-AuthUser tazama-api-client@tazama.org` / `--auth-user tazama-api-client@tazama.org`.
 
 Manual `curl` steps below are the same inject if you prefer to run them yourself.
 
@@ -491,7 +516,7 @@ $env:ADMIN_URL = "http://localhost:5100"
 
 With ingress, set `ADMIN_URL` to `http://admin.<ingress.domain>` (or `https://` if you terminated TLS). TMS stays `http://localhost:3000` on port-forward, not Docker Compose’s 5000.
 
-If `auth.authenticated` is `true`, admin-service expects a Keycloak JWT. Leave it `false` until you have loaded config and confirmed the pipeline (the default in `values/defaults.yaml`).
+`auth.authenticated` is `true` by default, so admin-service expects a Keycloak JWT. `configure` fetches that token unless you pass `-SkipAuth` / `--skip-auth`.
 
 ### Optional: clear the sample 901/902 map
 
@@ -673,7 +698,7 @@ Copy `values/secrets.example.yaml` to `values/secrets.yaml` once, as in [End-to-
 
 When to use it: a first on-prem install of the transaction pipeline, with no studios, CMS, or BIAR.
 
-`environments/core.yaml` already turns on Admin, TMS, ED, EF, TP, EA, Auth, Keycloak, three NATS relays, the public rule list, Postgres, NATS, and Valkey. The in-cluster Postgres replica stays off.
+`environments/core.yaml` already turns on Admin, TMS, ED, EF, TP, EA, Auth, Keycloak, three NATS relays, the public rule list, Postgres, NATS, and Valkey. The in-cluster Postgres replica stays off. JWT checks stay on. Add `-NoAuth` / `--no-auth` for a lab, or `-EmptyRealm` / `--empty-realm` for a Keycloak with groups but no login users (then `tenant` before `configure`).
 
 **PowerShell:**
 
@@ -1077,7 +1102,10 @@ Wrapper arguments: PowerShell uses `-Profile`, `-Cloud`, `-Selector`, and the fl
 | Overlay tests (Floci) | `.\test\test-floci.ps1` | `./test/test-floci.sh` |
 | Overlay render (no cluster) | `.\test\test-clouds.ps1` | `./test/test-clouds.sh` |
 | Generate unique secrets only (no cluster) | `.\tazama.cmd secrets` | `./tazama.sh secrets` |
-| Load TMS config from a local tms-configuration clone | `.\tazama.cmd configure` | `./tazama.sh configure` |
+| Load TMS config from a local tms-configuration clone (JWT by default) | `.\tazama.cmd configure` | `./tazama.sh configure` |
+| First install, JWT off (lab) | `.\tazama.cmd sync -Profile core -Cloud onprem -NoAuth` | `./tazama.sh sync core onprem --no-auth` |
+| First install, Keycloak with no login users | `.\tazama.cmd sync -Profile core -Cloud onprem -EmptyRealm` | `./tazama.sh sync core onprem --empty-realm` |
+| Add Keycloak tenant groups and users (TAZAMA.ORG by default) | `.\tazama.cmd tenant` | `./tazama.sh tenant` |
 | Preview the diff | `.\tazama.cmd diff -Profile core -Cloud onprem` | `./tazama.sh diff core onprem` |
 | Render YAML | `.\tazama.cmd template -Profile core -Cloud onprem -Cms` | `./tazama.sh template core onprem --cms` |
 | Status | `.\tazama.cmd status -Profile core -Cloud onprem` | `./tazama.sh status core onprem` |
@@ -1138,7 +1166,8 @@ install:
   biar: false
 
 auth:
-  authenticated: false
+  authenticated: true
+  emptyRealm: false
 ```
 
 Helmfile then applies nested files in order: datastore, auxiliary, core, rules, extensions, biar.

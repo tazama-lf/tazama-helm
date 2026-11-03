@@ -11,6 +11,7 @@ keycloak:
   adminUser: admin
   adminPassword: password
   clientSecret: auth-lib-client-test-secret
+  importUsers: true
 auth:
   publicKey: ""
   privateKey: ""

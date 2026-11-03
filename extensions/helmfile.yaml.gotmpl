@@ -14,6 +14,10 @@ helmDefaults:
 {{- $tag := .Values.global.tazamaVersion }}
 {{- $pull := .Values.global.imagePullPolicy }}
 {{- $sc := .Values.startupChecks }}
+{{- $authOn := true }}
+{{- if and .Values.auth (hasKey .Values.auth "authenticated") (eq (toString .Values.auth.authenticated) "false") }}
+{{- $authOn = false }}
+{{- end }}
 {{- $ing := .Values.ingress }}
 {{- $ingHosts := $ing.hosts | default dict }}
 {{- $ingDomain := $ing.domain | default "tazama.local" }}
@@ -95,6 +99,7 @@ releases:
           CONFIGURATION_DATABASE_URL: {{ printf "postgresql://%s:%s@%s:5432/configuration" .Values.secrets.postgres.username .Values.secrets.postgres.password $pg | quote }}
           ADMIN_SERVICE_URL: http://admin-service:5100
           OPENSEARCH_NODE: http://{{ .Values.hosts.opensearch | default "opensearch" }}:9200
+          AUTHENTICATED: {{ $authOn | quote }}
         {{- if $ing.enabled }}
         ingress:
           enabled: true
@@ -155,6 +160,7 @@ releases:
           CERT_PATH_PUBLIC: /home/app/test-public-key.pem
           REDIS_HOST: {{ $vk | quote }}
           OPENSEARCH_NODE: http://{{ .Values.hosts.opensearch | default "opensearch" }}:9200
+          AUTHENTICATED: {{ $authOn | quote }}
         volumeMounts:
           - name: auth-keys
             mountPath: /home/app/test-public-key.pem
@@ -241,6 +247,7 @@ releases:
           COUCHDB_USERNAME: admin
           COUCHDB_PASSWORD: unused
           OPENSEARCH_NODE: http://{{ .Values.hosts.opensearch | default "opensearch" }}:9200
+          AUTHENTICATED: {{ $authOn | quote }}
         {{- if $ing.enabled }}
         ingress:
           enabled: true
@@ -309,6 +316,7 @@ releases:
           REDIS_HOST: {{ $vk | quote }}
           SERVER_URL: {{ printf "nats://%s:4222" $nats | quote }}
           CONFIGURATION_DATABASE_URL: {{ printf "postgresql://%s:%s@%s:5432/enrichment" .Values.secrets.postgres.username .Values.secrets.postgres.password $pg | quote }}
+          AUTHENTICATED: {{ $authOn | quote }}
 
   - name: dems
     namespace: {{ $ns }}
@@ -341,3 +349,4 @@ releases:
           CONFIGURATION_DATABASE_URL: {{ printf "postgresql://%s:%s@%s:5432/configuration" .Values.secrets.postgres.username .Values.secrets.postgres.password $pg | quote }}
           DYNAMIC_HISTORY_DB_HOST: {{ $pg | quote }}
           EVENT_HISTORY_DB_HOST: {{ $pg | quote }}
+          AUTHENTICATED: {{ $authOn | quote }}

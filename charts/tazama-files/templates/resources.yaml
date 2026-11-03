@@ -19,7 +19,11 @@ metadata:
     app.kubernetes.io/part-of: tazama
 data:
   00-tazama-test-realm.json: |-
-{{ .Files.Get "keycloak/00-tazama-test-realm.json" | replace "auth-lib-client-test-secret" .Values.keycloak.clientSecret | nindent 4 }}
+{{- $realmFile := "keycloak/00-tazama-test-realm.json" }}
+{{- if and (hasKey .Values.keycloak "importUsers") (eq (toString .Values.keycloak.importUsers) "false") }}
+{{- $realmFile = "keycloak/00-tazama-empty-users-realm.json" }}
+{{- end }}
+{{ .Files.Get $realmFile | replace "auth-lib-client-test-secret" .Values.keycloak.clientSecret | nindent 4 }}
 ---
 apiVersion: v1
 kind: Secret

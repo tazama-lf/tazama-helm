@@ -35,5 +35,5 @@ env:
   LOG_LEVEL: debug
   STARTUP_TYPE: nats
   PRODUCER_STREAM: event-director
-  AUTHENTICATED: "false"
+  AUTHENTICATED: "true"
   CORS_POLICY: demo

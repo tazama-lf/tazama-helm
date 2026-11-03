@@ -95,11 +95,14 @@ install:
   sftp: false
   biar: false
 
-# AUTHENTICATED on TMS / admin. Auth-service and Keycloak are still installed
-# when install.auth / install.keycloak are true. Set true after you trust the
-# key pair in values/secrets.yaml.
+# AUTHENTICATED on TMS, admin, CMS, studios, DEMS, and DEAPI. Auth-service and
+# Keycloak are still installed when install.auth / install.keycloak are true.
+# Default is on. Pass -NoAuth / --no-auth to turn JWT checks off for a lab.
+# -EmptyRealm / --empty-realm imports groups and roles with no login users
+# (Keycloak Admin in master plus the auth-lib-client service account remain).
 auth:
-  authenticated: false
+  authenticated: true
+  emptyRealm: false
 
 # Per-service destination transport for the three relays. Helm does not install
 # Kafka or RabbitMQ brokers. NATS is already core infra.

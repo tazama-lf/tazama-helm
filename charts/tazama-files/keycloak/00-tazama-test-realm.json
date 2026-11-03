@@ -832,6 +832,26 @@
     "realmRoles" : [ "POST_V1_ADMIN_CONFIGURATION_TYPOLOGY", "LIST_V1_ADMIN_CONFIGURATION_NETWORK_MAP", "POST_V1_ADMIN_CONFIGURATION_NETWORK_MAP_RELOAD", "GET_V1_ADMIN_CONFIGURATION_NETWORK_MAP", "LIST_V1_ADMIN_CONFIGURATION_TYPOLOGY", "GET_V1_ADMIN_CONFIGURATION_RULE", "GET_V1_ADMIN_CONFIGURATION_TYPOLOGY", "PUT_V1_ADMIN_CONFIGURATION_RULE", "POST_V1_ADMIN_CONFIGURATION_RULE", "POST_V1_ADMIN_CONFIGURATION_NETWORK_MAP_DEACTIVATE", "DELETE_V1_ADMIN_CONFIGURATION_RULE", "POST_V1_ADMIN_CONFIGURATION_NETWORK_MAP_ACTIVATE", "PUT_V1_ADMIN_CONFIGURATION_TYPOLOGY", "LIST_V1_ADMIN_CONFIGURATION_RULE", "DELETE_V1_ADMIN_CONFIGURATION_NETWORK_MAP", "DELETE_V1_ADMIN_CONFIGURATION_TYPOLOGY", "POST_V1_ADMIN_CONFIGURATION_NETWORK_MAP", "PUT_V1_ADMIN_CONFIGURATION_NETWORK_MAP" ],
     "clientRoles" : { }
   }, {
+    "id" : "e4b7c1a2-8d3f-4a56-9c10-7f2e8b4d1a90",
+    "name" : "tazama-jupyter",
+    "path" : "/tazama-jupyter",
+    "subGroups" : [ ],
+    "attributes" : {
+      "TENANT_ID" : [ "DEFAULT" ]
+    },
+    "realmRoles" : [ ],
+    "clientRoles" : { }
+  }, {
+    "id" : "3f9a6d21-5c48-4e7b-b012-9d8a7c6e5b43",
+    "name" : "tazama-nifi",
+    "path" : "/tazama-nifi",
+    "subGroups" : [ ],
+    "attributes" : {
+      "TENANT_ID" : [ "DEFAULT" ]
+    },
+    "realmRoles" : [ ],
+    "clientRoles" : { }
+  }, {
     "id" : "70d906a9-8f04-4cfb-9e4f-1235e4fa9131",
     "name" : "tazama-reports",
     "path" : "/tazama-reports",

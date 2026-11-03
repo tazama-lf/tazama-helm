@@ -1,0 +1,41 @@
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+set -euxo pipefail
+
+EIP="${eip}"
+
+# Amazon Linux 2023 ships curl-minimal. `dnf install curl` conflicts with it
+# and aborts this script before k3s is installed.
+command -v curl >/dev/null
+
+TOKEN="$(curl -sS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")"
+IMDS_IP="$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4 || true)"
+
+TLS_SANS="--tls-san $${EIP}"
+if [ -n "$${IMDS_IP}" ]; then
+  TLS_SANS="$${TLS_SANS} --tls-san $${IMDS_IP}"
+fi
+
+until curl -sfL https://get.k3s.io -o /tmp/install-k3s.sh; do
+  sleep 5
+done
+
+sh /tmp/install-k3s.sh \
+  --disable traefik \
+  --write-kubeconfig-mode 644 \
+  $${TLS_SANS}
+
+until k3s kubectl get nodes | grep -q ' Ready'; do
+  sleep 5
+done
+
+# kubeconfig for the laptop / Lens: API advertised on the Elastic IP
+sed "s#https://127.0.0.1:6443#https://$${EIP}:6443#g" /etc/rancher/k3s/k3s.yaml \
+  > /home/ec2-user/kubeconfig.yaml
+chown ec2-user:ec2-user /home/ec2-user/kubeconfig.yaml
+chmod 600 /home/ec2-user/kubeconfig.yaml
+
+ln -sfn /usr/local/bin/k3s /usr/local/bin/kubectl
+
+touch /home/ec2-user/READY
+chown ec2-user:ec2-user /home/ec2-user/READY

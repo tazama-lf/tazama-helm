@@ -38,5 +38,5 @@ env:
   STARTUP_TYPE: nats
   SERVICE_CHANNEL_PRODUCER: service-channel
   SERVICE_CHANNEL_CONSUMER: service-channel-ack
-  AUTHENTICATED: "false"
+  AUTHENTICATED: "true"
   CORS_POLICY: demo

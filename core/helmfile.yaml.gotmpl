@@ -16,7 +16,10 @@ helmDefaults:
 {{- $pull := .Values.global.imagePullPolicy }}
 {{- $sc := .Values.startupChecks }}
 {{- $relay := .Values.relay | default dict }}
-{{- $authOn := .Values.auth.authenticated | default false }}
+{{- $authOn := true }}
+{{- if and .Values.auth (hasKey .Values.auth "authenticated") (eq (toString .Values.auth.authenticated) "false") }}
+{{- $authOn = false }}
+{{- end }}
 {{- $reps := .Values.replicas | default dict }}
 {{- $ing := .Values.ingress }}
 {{- $ingHosts := $ing.hosts | default dict }}
