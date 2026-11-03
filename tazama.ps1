@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("apply", "destroy", "status", "diff", "template", "lint", "sync", "secrets", "configure")]
+  [ValidateSet("apply", "destroy", "status", "diff", "template", "lint", "sync", "secrets", "configure", "tenant")]
   [string]$Command = "apply",
 
   [ValidateSet("core", "full", "private-rules", "member", "dockerhub")]
@@ -26,6 +26,8 @@ param(
   [switch]$Biar,
   [switch]$PostgresReplica,
   [switch]$GenerateSecrets,
+  [switch]$EmptyRealm,
+  [switch]$NoAuth,
 
   [string]$RelayEfrup = "",
   [string]$RelayTp = "",
@@ -47,7 +49,15 @@ param(
   [switch]$Newman,
   [switch]$Truncate,
   [switch]$Auth,
-  [switch]$SkipRestart
+  [switch]$SkipAuth,
+  [string]$AuthUser = "",
+  [string]$AuthPassword = "",
+  [switch]$SkipRestart,
+
+  [string]$Domain = "",
+  [string]$TenantId = "",
+  [string]$TenantPassword = "",
+  [string]$KeycloakUrl = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -111,7 +121,7 @@ function Resolve-RequiredBin {
 
 $helmfile = $null
 $helm = $null
-if ($Command -notin @("secrets", "configure")) {
+if ($Command -notin @("secrets", "configure", "tenant")) {
   $helmfile = Resolve-RequiredBin -Name "helmfile" -Hint "Install https://github.com/helmfile/helmfile/releases and retry."
   $helm = Resolve-RequiredBin -Name "helm" -Hint "Install https://helm.sh/docs/intro/install/ and retry."
 }
@@ -377,16 +387,22 @@ function Invoke-TazamaAdminPost {
 }
 
 function Get-TazamaAuthToken {
-  param([string]$AuthBase, [string]$KeycloakBase)
+  param(
+    [string]$AuthBase,
+    [string]$KeycloakBase,
+    [string]$Username = "tazama-user@tazama.org",
+    [string]$Password = "password"
+  )
   $kcBody = @{
     client_id     = "auth-lib-client"
     client_secret = "auth-lib-client-test-secret"
-    username      = "tazama-user@tazama.org"
-    password      = "password"
+    username      = $Username
+    password      = $Password
     grant_type    = "password"
   }
   $kc = Invoke-RestMethod -Method POST -Uri "$KeycloakBase/realms/tazama/protocol/openid-connect/token" -ContentType "application/x-www-form-urlencoded" -Body $kcBody
-  $login = Invoke-WebRequest -Method POST -Uri "$AuthBase/v1/auth/login" -Headers @{ Authorization = "Bearer $($kc.access_token)" } -ContentType "application/json" -Body '{"username":"tazama-user@tazama.org","password":"password"}' -UseBasicParsing
+  $loginBody = @{ username = $Username; password = $Password } | ConvertTo-Json -Compress
+  $login = Invoke-WebRequest -Method POST -Uri "$AuthBase/v1/auth/login" -Headers @{ Authorization = "Bearer $($kc.access_token)" } -ContentType "application/json" -Body $loginBody -UseBasicParsing
   return $login.Content.Trim()
 }
 
@@ -410,10 +426,14 @@ function Invoke-TazamaConfigure {
       Write-Host "Port-forwarding svc/admin-service 5100:5100 ..."
       [void]$forwards.Add((Start-TazamaPortForward -Kubectl $kubectl -Service "admin-service" -Port 5100))
     }
-    if ($Auth) {
-      Write-Host "Port-forwarding Keycloak and Auth for a bearer token ..."
+    $useAuth = -not $SkipAuth
+    if ($useAuth) {
+      $authName = if (-not [string]::IsNullOrWhiteSpace($AuthUser)) { $AuthUser.Trim() } else { "tazama-user@tazama.org" }
+      Write-Host "Port-forwarding Keycloak and Auth for a bearer token ($authName) ..."
       [void]$forwards.Add((Start-TazamaPortForward -Kubectl $kubectl -Service "keycloak" -Port 8080))
       [void]$forwards.Add((Start-TazamaPortForward -Kubectl $kubectl -Service "auth-service" -Port 3020))
+    } else {
+      Write-Host "Skipping JWT (admin-service AUTHENTICATED must be false or requests will 401)."
     }
 
     if ($Truncate) {
@@ -427,8 +447,10 @@ function Invoke-TazamaConfigure {
     }
 
     $token = ""
-    if ($Auth) {
-      $token = Get-TazamaAuthToken -AuthBase "http://localhost:3020" -KeycloakBase "http://localhost:8080"
+    if ($useAuth) {
+      $authName = if (-not [string]::IsNullOrWhiteSpace($AuthUser)) { $AuthUser.Trim() } else { "tazama-user@tazama.org" }
+      $authPass = if (-not [string]::IsNullOrWhiteSpace($AuthPassword)) { $AuthPassword } else { "password" }
+      $token = Get-TazamaAuthToken -AuthBase "http://localhost:3020" -KeycloakBase "http://localhost:8080" -Username $authName -Password $authPass
     }
 
     if ($Newman) {
@@ -501,6 +523,70 @@ function Invoke-TazamaConfigure {
   }
 }
 
+function Get-TazamaSecretValue {
+  param([string]$Path, [string]$Section, [string]$Key)
+  $current = ""
+  foreach ($line in Get-Content -Path $Path) {
+    if ($line -match '^\s{2}([A-Za-z0-9_]+):\s*$') {
+      $current = $Matches[1]
+      continue
+    }
+    if ($current -eq $Section -and $line -match ("^\s{4}" + [regex]::Escape($Key) + ":\s*(.*)$")) {
+      return $Matches[1].Trim().Trim('"').Trim("'")
+    }
+  }
+  return ""
+}
+
+function Invoke-TazamaTenant {
+  $kubectl = Resolve-RequiredBin -Name "kubectl" -Hint "Install https://kubernetes.io/docs/tasks/tools/ and retry."
+  $scriptPy = Join-Path $Root "charts\tazama-files\keycloak\add-tenant.py"
+  $scriptJs = Join-Path $Root "charts\tazama-files\keycloak\add-tenant.js"
+  if (-not (Test-Path -LiteralPath $scriptPy) -and -not (Test-Path -LiteralPath $scriptJs)) {
+    Write-Error "add-tenant.py / add-tenant.js not found under charts\tazama-files\keycloak."
+  }
+  $python = Get-Command python -ErrorAction SilentlyContinue
+  if (-not $python) {
+    $python = Get-Command python3 -ErrorAction SilentlyContinue
+  }
+  $node = Get-Command node -ErrorAction SilentlyContinue
+  if (-not $python -and -not $node) {
+    Write-Error "Need python or node to run add-tenant. Install Python 3.8+ or Node.js 18+."
+  }
+
+  $tenantDomain = if ($Domain) { $Domain.Trim() } else { "tazama.org" }
+  $id = if ($TenantId) { $TenantId.Trim() } else { "TAZAMA" }
+  $pw = if ($TenantPassword) { $TenantPassword } else { "password" }
+  $kcUrl = if ($KeycloakUrl) { $KeycloakUrl.Trim().TrimEnd("/") } else { "http://localhost:8080" }
+  $adminUser = Get-TazamaSecretValue -Path $secretsPath -Section "keycloak" -Key "adminUser"
+  $adminPassword = Get-TazamaSecretValue -Path $secretsPath -Section "keycloak" -Key "adminPassword"
+  if ([string]::IsNullOrWhiteSpace($adminUser)) { $adminUser = "admin" }
+  if ([string]::IsNullOrWhiteSpace($adminPassword)) { $adminPassword = "password" }
+
+  $needLocal = $kcUrl -match "localhost|127\.0\.0\.1"
+  $pf = $null
+  Write-Host "Adding Keycloak tenant $id ($tenantDomain) via add-tenant (same as tazama-stack)."
+  Write-Host "This creates <DOMAIN> child groups (e.g. TAZAMA.ORG) and 12 users including tazama-api-client."
+  try {
+    if ($needLocal) {
+      Write-Host "Port-forwarding svc/keycloak 8080:8080 ..."
+      $pf = Start-TazamaPortForward -Kubectl $kubectl -Service "keycloak" -Port 8080
+    }
+    if ($python) {
+      & $python.Source $scriptPy --domain $tenantDomain --tenant-id $id --password $pw --keycloak-url $kcUrl --admin-user $adminUser --admin-password $adminPassword --realm tazama
+    } else {
+      & $node.Source $scriptJs --domain $tenantDomain --tenant-id $id --password $pw --keycloak-url $kcUrl --admin-user $adminUser --admin-password $adminPassword --realm tazama
+    }
+    if ($LASTEXITCODE -ne 0) {
+      Write-Error "add-tenant exited $LASTEXITCODE."
+    }
+  } finally {
+    if ($pf -and -not $pf.HasExited) {
+      Stop-Process -Id $pf.Id -Force -ErrorAction SilentlyContinue
+    }
+  }
+}
+
 Ensure-TazamaPasswords -Path $secretsPath -Force:$GenerateSecrets
 Ensure-TazamaAuthKeys -Path $secretsPath -Force:$GenerateSecrets
 
@@ -512,6 +598,11 @@ if ($Command -eq "secrets") {
 
 if ($Command -eq "configure") {
   Invoke-TazamaConfigure
+  exit 0
+}
+
+if ($Command -eq "tenant") {
+  Invoke-TazamaTenant
   exit 0
 }
 
@@ -549,6 +640,12 @@ if ($Biar) {
 }
 if ($PostgresReplica) {
   [void]$stateSets.Add("install.postgresqlReplica=true")
+}
+if ($EmptyRealm) {
+  [void]$stateSets.Add("auth.emptyRealm=true")
+}
+if ($NoAuth) {
+  [void]$stateSets.Add("auth.authenticated=false")
 }
 
 if (-not [string]::IsNullOrWhiteSpace($RelayEfrup)) {

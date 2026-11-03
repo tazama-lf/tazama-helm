@@ -9,7 +9,7 @@ usage() {
   cat <<'EOF'
 Usage: ./tazama.sh <command> [profile] [cloud] [selector] [flags]
 
-Commands: apply | destroy | status | diff | template | lint | sync | secrets | configure
+Commands: apply | destroy | status | diff | template | lint | sync | secrets | configure | tenant
 Profiles: core | full | private-rules
           (member is an alias for private-rules; dockerhub is an alias for full)
 Clouds:   onprem | eks | gke | aks
@@ -18,14 +18,17 @@ Sizing flag:    --sizing standard|small|medium|large   (replica counts)
 
 Package flags:  --cms --extensions --dems --deapi --tools
                 --connection-studio --rule-studio --biar --postgres-replica
-                --generate-secrets
+                --generate-secrets --empty-realm --no-auth
 Relay flags:    --relay-efrup|--relay-tp|--relay-ea nats|kafka|rabbitmq|rest
                 --kafka-brokers|--rabbitmq-url|--rest-url VALUE
 Database flags: --postgresql-host|--postgresql-replica-host VALUE
 Ingress flags:  --ingress --ingress-domain DOMAIN [--ingress-class NAME]
                 [--ingress-service-type LoadBalancer|NodePort]
 Selector:       --selector LABEL   (or a positional label such as name=tms-service)
-Configure:      --tms-config-path DIR --admin-url URL --newman --truncate --auth --skip-restart
+Configure:      --tms-config-path DIR --admin-url URL --newman --truncate
+                --skip-auth --auth-user USER --auth-password PASS --skip-restart
+                (--auth is accepted and is the default)
+Tenant:         --domain tazama.org --tenant-id TAZAMA --tenant-password PASS [--keycloak-url URL]
 EOF
 }
 
@@ -65,12 +68,21 @@ INGRESS_DOMAIN=""
 INGRESS_CLASS=""
 INGRESS_SERVICE_TYPE=""
 GENERATE_SECRETS=0
+EMPTY_REALM=0
+NO_AUTH=0
 TMS_CONFIG_PATH=""
 ADMIN_URL_FLAG=""
 NEWMAN=0
 TRUNCATE=0
 AUTH_FLAG=0
+SKIP_AUTH=0
+AUTH_USER=""
+AUTH_PASSWORD=""
 SKIP_RESTART=0
+TENANT_DOMAIN=""
+TENANT_ID_FLAG=""
+TENANT_PASSWORD=""
+KEYCLOAK_URL_FLAG=""
 
 need_value() {
   local flag="$1"
@@ -110,6 +122,8 @@ while [[ $# -gt 0 ]]; do
     --biar) BIAR=1; shift ;;
     --postgres-replica) POSTGRES_REPLICA=1; shift ;;
     --generate-secrets) GENERATE_SECRETS=1; shift ;;
+    --empty-realm) EMPTY_REALM=1; shift ;;
+    --no-auth) NO_AUTH=1; shift ;;
     --tms-config-path)
       need_value "$arg" "${2:-}"
       TMS_CONFIG_PATH="$2"
@@ -125,7 +139,44 @@ while [[ $# -gt 0 ]]; do
     --newman) NEWMAN=1; shift ;;
     --truncate) TRUNCATE=1; shift ;;
     --auth) AUTH_FLAG=1; shift ;;
+    --skip-auth) SKIP_AUTH=1; shift ;;
+    --auth-user)
+      need_value "$arg" "${2:-}"
+      AUTH_USER="$2"
+      shift 2
+      ;;
+    --auth-user=*) AUTH_USER="${arg#*=}"; shift ;;
+    --auth-password)
+      need_value "$arg" "${2:-}"
+      AUTH_PASSWORD="$2"
+      shift 2
+      ;;
+    --auth-password=*) AUTH_PASSWORD="${arg#*=}"; shift ;;
     --skip-restart) SKIP_RESTART=1; shift ;;
+    --domain)
+      need_value "$arg" "${2:-}"
+      TENANT_DOMAIN="$2"
+      shift 2
+      ;;
+    --domain=*) TENANT_DOMAIN="${arg#*=}"; shift ;;
+    --tenant-id)
+      need_value "$arg" "${2:-}"
+      TENANT_ID_FLAG="$2"
+      shift 2
+      ;;
+    --tenant-id=*) TENANT_ID_FLAG="${arg#*=}"; shift ;;
+    --tenant-password)
+      need_value "$arg" "${2:-}"
+      TENANT_PASSWORD="$2"
+      shift 2
+      ;;
+    --tenant-password=*) TENANT_PASSWORD="${arg#*=}"; shift ;;
+    --keycloak-url)
+      need_value "$arg" "${2:-}"
+      KEYCLOAK_URL_FLAG="$2"
+      shift 2
+      ;;
+    --keycloak-url=*) KEYCLOAK_URL_FLAG="${arg#*=}"; shift ;;
     --relay-efrup)
       need_value "$arg" "${2:-}"
       RELAY_EFRUP="$2"
@@ -238,7 +289,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$COMMAND" in
-  apply|destroy|status|diff|template|lint|sync|secrets|configure) ;;
+  apply|destroy|status|diff|template|lint|sync|secrets|configure|tenant) ;;
   *)
     echo "Unknown command: $COMMAND" >&2
     usage >&2
@@ -298,7 +349,7 @@ fi
 export TAZAMA_CLOUD="$CLOUD"
 export TAZAMA_SIZING="$SIZING"
 
-if [[ "$COMMAND" != "secrets" && "$COMMAND" != "configure" ]]; then
+if [[ "$COMMAND" != "secrets" && "$COMMAND" != "configure" && "$COMMAND" != "tenant" ]]; then
   if ! command -v helmfile >/dev/null 2>&1; then
     echo "helmfile is not on PATH. Install https://github.com/helmfile/helmfile/releases and retry." >&2
     exit 1
@@ -525,26 +576,31 @@ run_configure() {
     pf_pids+=("$!")
     wait_tcp 127.0.0.1 5100
   fi
-  if [[ "$AUTH_FLAG" -eq 1 ]]; then
-    echo "Port-forwarding Keycloak and Auth for a bearer token ..."
+  if [[ "$SKIP_AUTH" -eq 0 ]]; then
+    local auth_user="${AUTH_USER:-tazama-user@tazama.org}"
+    local auth_password="${AUTH_PASSWORD:-password}"
+    echo "Port-forwarding Keycloak and Auth for a bearer token ($auth_user) ..."
     kubectl port-forward -n tazama svc/keycloak 8080:8080 >/dev/null 2>&1 &
     pf_pids+=("$!")
     kubectl port-forward -n tazama svc/auth-service 3020:3020 >/dev/null 2>&1 &
     pf_pids+=("$!")
     wait_tcp 127.0.0.1 8080
     wait_tcp 127.0.0.1 3020
-    local kc
+    local kc login_body
     kc="$(curl -sS -X POST "http://localhost:8080/realms/tazama/protocol/openid-connect/token" \
       -H "Content-Type: application/x-www-form-urlencoded" \
       -d "client_id=auth-lib-client" \
       -d "client_secret=auth-lib-client-test-secret" \
-      -d "username=tazama-user@tazama.org" \
-      -d "password=password" \
+      -d "username=$auth_user" \
+      -d "password=$auth_password" \
       -d "grant_type=password" | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')"
+    login_body="$(python3 -c 'import json,sys; print(json.dumps({"username": sys.argv[1], "password": sys.argv[2]}))' "$auth_user" "$auth_password")"
     token="$(curl -sS -X POST "http://localhost:3020/v1/auth/login" \
       -H "Authorization: Bearer $kc" \
       -H "Content-Type: application/json" \
-      -d '{"username":"tazama-user@tazama.org","password":"password"}')"
+      -d "$login_body")"
+  else
+    echo "Skipping JWT (admin-service AUTHENTICATED must be false or requests will 401)."
   fi
 
   if [[ "$TRUNCATE" -eq 1 ]]; then
@@ -618,8 +674,82 @@ PY
   echo "Configuration loaded. Processors will pick up the active network map after the rollout."
 }
 
+yaml_secret() {
+  local section="$1" key="$2"
+  awk -v section="$section" -v key="$key" '
+    $0 ~ "^  " section ":" { insec=1; next }
+    insec && $0 ~ /^  [A-Za-z]/ { insec=0 }
+    insec && $0 ~ "^    " key ":" {
+      sub("^    " key ":[[:space:]]*", "")
+      gsub(/["\047]/, "")
+      print
+      exit
+    }
+  ' values/secrets.yaml
+}
+
+run_tenant() {
+  if ! command -v kubectl >/dev/null 2>&1; then
+    echo "kubectl is not on PATH. Install https://kubernetes.io/docs/tasks/tools/ and retry." >&2
+    exit 1
+  fi
+  local script_py="$ROOT/charts/tazama-files/keycloak/add-tenant.py"
+  local script_js="$ROOT/charts/tazama-files/keycloak/add-tenant.js"
+  if [[ ! -f "$script_py" && ! -f "$script_js" ]]; then
+    echo "add-tenant.py / add-tenant.js not found under charts/tazama-files/keycloak." >&2
+    exit 1
+  fi
+  local domain="${TENANT_DOMAIN:-tazama.org}"
+  local tenant_id="${TENANT_ID_FLAG:-TAZAMA}"
+  local password="${TENANT_PASSWORD:-password}"
+  local kc_url="${KEYCLOAK_URL_FLAG:-http://localhost:8080}"
+  kc_url="${kc_url%/}"
+  local admin_user admin_password
+  admin_user="$(yaml_secret keycloak adminUser)"
+  admin_password="$(yaml_secret keycloak adminPassword)"
+  [[ -z "$admin_user" ]] && admin_user="admin"
+  [[ -z "$admin_password" ]] && admin_password="password"
+
+  echo "Adding Keycloak tenant $tenant_id ($domain) via add-tenant (same as tazama-stack)."
+  echo "This creates <DOMAIN> child groups (e.g. TAZAMA.ORG) and 12 users including tazama-api-client."
+
+  local pf_pid=""
+  cleanup_kc() {
+    if [[ -n "$pf_pid" ]]; then
+      kill "$pf_pid" >/dev/null 2>&1 || true
+    fi
+  }
+  trap cleanup_kc EXIT
+
+  if [[ "$kc_url" == *localhost* || "$kc_url" == *127.0.0.1* ]]; then
+    echo "Port-forwarding svc/keycloak 8080:8080 ..."
+    kubectl port-forward -n tazama svc/keycloak 8080:8080 >/dev/null 2>&1 &
+    pf_pid="$!"
+    wait_tcp 127.0.0.1 8080
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    python3 "$script_py" --domain "$domain" --tenant-id "$tenant_id" --password "$password" \
+      --keycloak-url "$kc_url" --admin-user "$admin_user" --admin-password "$admin_password" --realm tazama
+  elif command -v python >/dev/null 2>&1; then
+    python "$script_py" --domain "$domain" --tenant-id "$tenant_id" --password "$password" \
+      --keycloak-url "$kc_url" --admin-user "$admin_user" --admin-password "$admin_password" --realm tazama
+  elif command -v node >/dev/null 2>&1; then
+    node "$script_js" --domain "$domain" --tenant-id "$tenant_id" --password "$password" \
+      --keycloak-url "$kc_url" --admin-user "$admin_user" --admin-password "$admin_password" --realm tazama
+  else
+    echo "Need python or node to run add-tenant. Install Python 3.8+ or Node.js 18+." >&2
+    exit 1
+  fi
+}
+
 if [[ "$COMMAND" == "configure" ]]; then
   run_configure
+  exit 0
+fi
+
+if [[ "$COMMAND" == "tenant" ]]; then
+  run_tenant
   exit 0
 fi
 
@@ -665,6 +795,12 @@ if [[ "$BIAR" -eq 1 ]]; then
 fi
 if [[ "$POSTGRES_REPLICA" -eq 1 ]]; then
   add_set "install.postgresqlReplica=true"
+fi
+if [[ "$EMPTY_REALM" -eq 1 ]]; then
+  add_set "auth.emptyRealm=true"
+fi
+if [[ "$NO_AUTH" -eq 1 ]]; then
+  add_set "auth.authenticated=false"
 fi
 
 if [[ -n "$RELAY_EFRUP" ]]; then

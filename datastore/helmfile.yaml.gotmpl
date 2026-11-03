@@ -37,6 +37,11 @@ releases:
           adminUser: {{ .Values.secrets.keycloak.adminUser | quote }}
           adminPassword: {{ .Values.secrets.keycloak.adminPassword | quote }}
           clientSecret: {{ .Values.secrets.keycloak.clientSecret | quote }}
+          {{- $importUsers := true }}
+          {{- if and .Values.auth (hasKey .Values.auth "emptyRealm") (eq (toString .Values.auth.emptyRealm) "true") }}
+          {{- $importUsers = false }}
+          {{- end }}
+          importUsers: {{ $importUsers }}
         auth:
 {{ .Values.secrets.auth | toYaml | nindent 10 }}
         createPullSecret: {{ .Values.secrets.dockerHub.createPullSecret | default false }}

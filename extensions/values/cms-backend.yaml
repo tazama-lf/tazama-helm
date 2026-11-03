@@ -23,7 +23,7 @@ env:
   POSTGRES_USER: postgres
   POSTGRES_PORT: "5432"
   TRIAGE_TYPE: MANUAL
-  AUTHENTICATED: "false"
+  AUTHENTICATED: "true"
   STARTUP_TYPE: nats
   CONSUMER_STREAM: investigation-service
   PRODUCER_STREAM: default
