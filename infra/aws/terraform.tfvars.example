@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copy to terraform.tfvars (gitignored) if you want to pin values.
+# Prefer .\infra\aws\up.cmd -Sizing small|medium|large (that sets sizing for you).
+
+region = "eu-west-1"
+# sizing      = "medium"   # small=t3.medium, medium=t3.large, large=t3.xlarge
+# aws_profile = "tazama"   # named CLI profile; leave unset to use [default]
+# allowed_cidr = "1.2.3.4/32"
