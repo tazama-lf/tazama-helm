@@ -586,11 +586,15 @@ run_configure() {
     pf_pids+=("$!")
     wait_tcp 127.0.0.1 8080
     wait_tcp 127.0.0.1 3020
-    local kc login_body
+    local kc login_body client_secret
+    client_secret="$(yaml_secret keycloak clientSecret)"
+    if [[ -z "$client_secret" ]]; then
+      client_secret="auth-lib-client-test-secret"
+    fi
     kc="$(curl -sS -X POST "http://localhost:8080/realms/tazama/protocol/openid-connect/token" \
       -H "Content-Type: application/x-www-form-urlencoded" \
       -d "client_id=auth-lib-client" \
-      -d "client_secret=auth-lib-client-test-secret" \
+      -d "client_secret=$client_secret" \
       -d "username=$auth_user" \
       -d "password=$auth_password" \
       -d "grant_type=password" | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')"

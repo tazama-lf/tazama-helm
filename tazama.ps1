@@ -391,11 +391,15 @@ function Get-TazamaAuthToken {
     [string]$AuthBase,
     [string]$KeycloakBase,
     [string]$Username = "tazama-user@tazama.org",
-    [string]$Password = "password"
+    [string]$Password = "password",
+    [string]$ClientSecret = "auth-lib-client-test-secret"
   )
+  if ([string]::IsNullOrWhiteSpace($ClientSecret)) {
+    $ClientSecret = "auth-lib-client-test-secret"
+  }
   $kcBody = @{
     client_id     = "auth-lib-client"
-    client_secret = "auth-lib-client-test-secret"
+    client_secret = $ClientSecret
     username      = $Username
     password      = $Password
     grant_type    = "password"
@@ -450,7 +454,8 @@ function Invoke-TazamaConfigure {
     if ($useAuth) {
       $authName = if (-not [string]::IsNullOrWhiteSpace($AuthUser)) { $AuthUser.Trim() } else { "tazama-user@tazama.org" }
       $authPass = if (-not [string]::IsNullOrWhiteSpace($AuthPassword)) { $AuthPassword } else { "password" }
-      $token = Get-TazamaAuthToken -AuthBase "http://localhost:3020" -KeycloakBase "http://localhost:8080" -Username $authName -Password $authPass
+      $clientSecret = Get-TazamaSecretValue -Path $secretsPath -Section "keycloak" -Key "clientSecret"
+      $token = Get-TazamaAuthToken -AuthBase "http://localhost:3020" -KeycloakBase "http://localhost:8080" -Username $authName -Password $authPass -ClientSecret $clientSecret
     }
 
     if ($Newman) {
