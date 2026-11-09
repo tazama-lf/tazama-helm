@@ -487,14 +487,40 @@ Core already ships a sample network map (rules 901/902 on `pacs.002.001.12`, ten
 Follow the Admin-Service API steps in [tms-configuration](https://github.com/frmscoe/tms-configuration). That repo is **private**. Clone it with your GitHub access next to this folder. The wrapper does not vendor the collection or the `curl/` payloads.
 
 ```powershell
-.\tazama.cmd configure
+.\tazama.cmd configure -Truncate
 ```
 
 ```bash
-./tazama.sh configure
+./tazama.sh configure --truncate
 ```
 
-That command finds `../tms-configuration` (or `../tms-configuration-main`, or `-TmsConfigPath` / `--tms-config-path`, or `TAZAMA_TMS_CONFIG`), port-forwards `admin-service` when the URL is localhost, POSTs the `curl/` payloads with a JWT (default user `tazama-user@tazama.org`), activates network map `4.0.0`, and restarts Event Director, Typology Processor, and Event Adjudicator. Add `-Truncate` / `--truncate` to clear the sample 901/902 rows first. Add `-Newman` / `--newman` to run the collection's **Admin-Service API / v4.0.0** folder instead of the `curl/` files. Do not run the Hasura API folder against this stack. Pass `-SkipAuth` / `--skip-auth` only if you installed with `-NoAuth`. After `-EmptyRealm` plus `tenant`, use `-AuthUser tazama-api-client@tazama.org` / `--auth-user tazama-api-client@tazama.org`.
+Use `-Truncate` / `--truncate` on the first load. Core already inserted sample rules 901/902 via Postgres init SQL. Without truncate, admin-service returns 500 `Duplicate key value violates unique constraint "rule_pkey"`.
+
+That command finds `../tms-configuration` (or `../tms-configuration-main`, or `-TmsConfigPath` / `--tms-config-path`, or `TAZAMA_TMS_CONFIG`), port-forwards `admin-service` when the URL is localhost, truncates `rule` / `typology` / `network_map`, POSTs the `curl/` payloads with a JWT (default user `tazama-user@tazama.org`), activates network map `4.0.0`, and restarts Event Director, Typology Processor, and Event Adjudicator. Add `-Newman` / `--newman` to run the collection's **Admin-Service API / v4.0.0** folder instead of the `curl/` files. Do not run the Hasura API folder against this stack. Pass `-SkipAuth` / `--skip-auth` only if you installed with `-NoAuth`. After `-EmptyRealm` plus `tenant`, use `-AuthUser tazama-api-client@tazama.org` / `--auth-user tazama-api-client@tazama.org`.
+
+### Confirm the rows landed
+
+Query the `configuration` database. The sample 901/902 map is two rules. After `configure -Truncate` you should see many more rules, several typologies, and one network map (the public v4 payloads are typically around 34 / 6 / 1).
+
+```powershell
+kubectl exec -n tazama postgresql-0 -- psql -U postgres -d configuration -c "SELECT 'rule' AS table, count(*) FROM rule UNION ALL SELECT 'typology', count(*) FROM typology UNION ALL SELECT 'network_map', count(*) FROM network_map;"
+```
+
+```bash
+kubectl exec -n tazama postgresql-0 -- psql -U postgres -d configuration -c "SELECT 'rule' AS table, count(*) FROM rule UNION ALL SELECT 'typology', count(*) FROM typology UNION ALL SELECT 'network_map', count(*) FROM network_map;"
+```
+
+The map version is `cfg` (not a `version` column). `tenantId` and `active` are generated from the JSON:
+
+```powershell
+kubectl exec -n tazama postgresql-0 -- psql -U postgres -d configuration -c "SELECT configuration->>'cfg' AS cfg, configuration->>'tenantId' AS tenant_id, configuration->>'active' AS active FROM network_map;"
+```
+
+```bash
+kubectl exec -n tazama postgresql-0 -- psql -U postgres -d configuration -c "SELECT configuration->>'cfg' AS cfg, configuration->>'tenantId' AS tenant_id, configuration->>'active' AS active FROM network_map;"
+```
+
+Expect `cfg` `4.0.0`, tenant `DEFAULT`, `active` `true`. If the pod name is not `postgresql-0`, list Postgres pods first (`kubectl get pods -n tazama | findstr postgres` on Windows).
 
 Manual `curl` steps below are the same inject if you prefer to run them yourself.
 
@@ -518,9 +544,9 @@ With ingress, set `ADMIN_URL` to `http://admin.<ingress.domain>` (or `https://` 
 
 `auth.authenticated` is `true` by default, so admin-service expects a Keycloak JWT. `configure` fetches that token unless you pass `-SkipAuth` / `--skip-auth`.
 
-### Optional: clear the sample 901/902 map
+### Optional: clear the sample 901/902 map by hand
 
-Only do this if you want the tms-configuration payloads to be the only map in Postgres. This deletes configuration rows. It does not drop schema.
+`configure -Truncate` already does this. Use the SQL below only if you are posting the payloads yourself. This deletes configuration rows. It does not drop schema.
 
 ```powershell
 kubectl exec -it -n tazama postgresql-0 -- psql -U postgres -d configuration
@@ -1102,7 +1128,7 @@ Wrapper arguments: PowerShell uses `-Profile`, `-Cloud`, `-Selector`, and the fl
 | Overlay tests (Floci) | `.\test\test-floci.ps1` | `./test/test-floci.sh` |
 | Overlay render (no cluster) | `.\test\test-clouds.ps1` | `./test/test-clouds.sh` |
 | Generate unique secrets only (no cluster) | `.\tazama.cmd secrets` | `./tazama.sh secrets` |
-| Load TMS config from a local tms-configuration clone (JWT by default) | `.\tazama.cmd configure` | `./tazama.sh configure` |
+| Load TMS config from a local tms-configuration clone (JWT by default; truncate sample 901/902 first) | `.\tazama.cmd configure -Truncate` | `./tazama.sh configure --truncate` |
 | First install, JWT off (lab) | `.\tazama.cmd sync -Profile core -Cloud onprem -NoAuth` | `./tazama.sh sync core onprem --no-auth` |
 | First install, Keycloak with no login users | `.\tazama.cmd sync -Profile core -Cloud onprem -EmptyRealm` | `./tazama.sh sync core onprem --empty-realm` |
 | Add Keycloak tenant groups and users (TAZAMA.ORG by default) | `.\tazama.cmd tenant` | `./tazama.sh tenant` |

@@ -15,7 +15,7 @@ When the user asks which wrapper flags to combine (CMS, BIAR, relays, selectors,
 - Kind / k3s / kubeadm / Docker Desktop Kubernetes → `-Cloud onprem`. Never mix Kind with `-Cloud eks`.
 - On-prem ingress is NodePort. LoadBalancer on Kind hangs Helm `--wait`.
 - TMS port **3000**, admin **5100**. Not Docker Compose 5000.
-- No Hasura. Configuration is admin-service (`.\tazama.cmd configure`).
+- No Hasura. Configuration is admin-service (`.\tazama.cmd configure -Truncate`). Core already has sample 901/902; skip `-Truncate` and you hit `rule_pkey`.
 - Helmfile must be 1.x. Never commit `values/secrets.yaml`.
 
 ## Default first install
