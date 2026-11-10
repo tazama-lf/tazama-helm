@@ -103,7 +103,7 @@ Keycloak with groups/roles but no login users (then create a tenant before confi
 ```powershell
 .\tazama.cmd sync -Profile core -Cloud onprem -EmptyRealm
 .\tazama.cmd tenant
-.\tazama.cmd configure -AuthUser tazama-api-client@tazama.org -AuthPassword password
+.\tazama.cmd configure -Truncate -AuthUser tazama-api-client@tazama.org -AuthPassword password
 ```
 
 Core + CMS:
@@ -199,15 +199,15 @@ Clone next to `tazama-Helms/` (or pass `-TmsConfigPath`):
 git clone https://github.com/frmscoe/tms-configuration
 ```
 
-Default runner (same inject as the collection's **Admin-Service API** folder, no Postman/Newman):
+Default runner (same inject as the collection's **Admin-Service API** folder, no Postman/Newman). Use `-Truncate` on the first load so sample 901/902 does not collide (`rule_pkey`):
 
 ```powershell
-.\tazama.cmd configure
 .\tazama.cmd configure -Truncate
+.\tazama.cmd configure
 .\tazama.cmd configure -TmsConfigPath "H:\path\to\tms-configuration"
 .\tazama.cmd configure -AdminUrl "http://admin.tazama.local"
 .\tazama.cmd configure -SkipAuth
-.\tazama.cmd configure -AuthUser tazama-api-client@tazama.org -AuthPassword password
+.\tazama.cmd configure -Truncate -AuthUser tazama-api-client@tazama.org -AuthPassword password
 ```
 
 Newman (still from the private clone; runs **Admin-Service API / v4.0.0** only, skips Hasura):
@@ -218,15 +218,24 @@ npm install -g newman
 ```
 
 ```bash
-./tazama.sh configure
 ./tazama.sh configure --truncate
+./tazama.sh configure
 ./tazama.sh configure --tms-config-path /path/to/tms-configuration
 ./tazama.sh configure --newman
 ./tazama.sh configure --skip-auth
-./tazama.sh configure --auth-user tazama-api-client@tazama.org --auth-password password
+./tazama.sh configure --truncate --auth-user tazama-api-client@tazama.org --auth-password password
 ```
 
-`configure` port-forwards `admin-service:5100` when the URL is localhost, then POSTs `curl/rule-configs.json`, `typology-configs.json`, `network-map.json`, and activate **with a JWT** (`tazama-user@tazama.org` / `password` unless `-AuthUser` / `-AuthPassword`). It restarts ED / TP / EA unless `-SkipRestart` / `--skip-restart`. `-Truncate` / `--truncate` clears `rule`, `typology`, and `network_map` first. `-SkipAuth` / `--skip-auth` skips the token; only use that with `-NoAuth`. After `-EmptyRealm`, run `tenant` first, then `configure -AuthUser tazama-api-client@tazama.org`. `-Auth` / `--auth` is accepted and is the default.
+`configure` port-forwards `admin-service:5100` when the URL is localhost, then POSTs `curl/rule-configs.json`, `typology-configs.json`, `network-map.json`, and activate **with a JWT** (`tazama-user@tazama.org` / `password` unless `-AuthUser` / `-AuthPassword`). It restarts ED / TP / EA unless `-SkipRestart` / `--skip-restart`. Use `-Truncate` / `--truncate` on the first load: it clears `rule`, `typology`, and `network_map` so sample 901/902 does not hit `rule_pkey`. `-SkipAuth` / `--skip-auth` skips the token; only use that with `-NoAuth`. After `-EmptyRealm`, run `tenant` first, then `configure -AuthUser tazama-api-client@tazama.org`. `-Auth` / `--auth` is accepted and is the default.
+
+Confirm the rows in Postgres (`configuration` database). Sample 901/902 is two rules; after `-Truncate` you should see many more (public v4 payloads are typically around 34 / 6 / 1):
+
+```powershell
+kubectl exec -n tazama postgresql-0 -- psql -U postgres -d configuration -c "SELECT 'rule' AS table, count(*) FROM rule UNION ALL SELECT 'typology', count(*) FROM typology UNION ALL SELECT 'network_map', count(*) FROM network_map;"
+kubectl exec -n tazama postgresql-0 -- psql -U postgres -d configuration -c "SELECT configuration->>'cfg' AS cfg, configuration->>'tenantId' AS tenant_id, configuration->>'active' AS active FROM network_map;"
+```
+
+Expect `cfg` `4.0.0`, tenant `DEFAULT`, `active` `true`.
 
 Do not commit the private collection into this repo.
 
@@ -276,6 +285,6 @@ If `$env:KUBECONFIG` is set, the wrapper passes `--kubeconfig`.
 ./tazama.sh sync core onprem --extensions --tools
 ./tazama.sh sync core onprem --no-auth
 ./tazama.sh sync core onprem --empty-realm
-./tazama.sh configure --auth-user tazama-api-client@tazama.org --auth-password password
+./tazama.sh configure --truncate --auth-user tazama-api-client@tazama.org --auth-password password
 ./tazama.sh destroy core onprem name=tms-service
 ```

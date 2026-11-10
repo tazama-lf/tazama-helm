@@ -40,7 +40,7 @@ Install:
 - [ ] 4. sync the requested profile/cloud
 - [ ] 5. pods Ready in namespace tazama
 - [ ] 6. TMS health (port-forward 3000 or ingress)
-- [ ] 7. Optional: load tms-configuration via `configure`
+- [ ] 7. Optional: load tms-configuration via `configure -Truncate`
 - [ ] 8. Optional: Keycloak tenant groups via `tenant` (TAZAMA.ORG + 12 users)
 ```
 
@@ -138,10 +138,10 @@ Core already has sample rules 901/902 on `pacs.002.001.12` tenant `DEFAULT`. A f
 If that repo is cloned next to `tazama-Helms/` (or `-TmsConfigPath`):
 
 ```powershell
-.\tazama.cmd configure
+.\tazama.cmd configure -Truncate
 ```
 
-That port-forwards admin-service, fetches a JWT (`tazama-user@tazama.org` unless `-SkipAuth` or `-AuthUser`), POSTs `curl/` payloads, activates `network_map/4.0.0` with cascade reload, and restarts ED / TP / EA.
+Use `-Truncate` on the first load. Sample 901/902 is already in Postgres; without it admin-service returns 500 `rule_pkey`. That port-forwards admin-service, fetches a JWT (`tazama-user@tazama.org` unless `-SkipAuth` or `-AuthUser`), POSTs `curl/` payloads, activates `network_map/4.0.0` with cascade reload, and restarts ED / TP / EA.
 
 Do not install Hasura. Do not run the Hasura Postman folder.
 
@@ -167,5 +167,6 @@ TMS test traffic: pacs.008 / pacs.002 to `http://localhost:3000`. Until a full m
 | ImagePullBackOff | Docker Hub rate limit; set pull secret in `values/secrets.yaml`. |
 | Keycloak CrashLoop on reused PVC | `CREATE DATABASE keycloak;` if missing. Realm ConfigMap `keycloak-realm`. |
 | ED: no network map for DEFAULT | Load/activate tms-configuration, then restart ED/TP/EA. |
+| 500 `rule_pkey` on configure | Sample 901/902 already in Postgres. Use `.\tazama.cmd configure -Truncate`. |
 
 Do not `destroy` unless the user asked to uninstall.
