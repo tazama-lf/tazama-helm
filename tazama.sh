@@ -9,7 +9,7 @@ usage() {
   cat <<'EOF'
 Usage: ./tazama.sh <command> [profile] [cloud] [selector] [flags]
 
-Commands: apply | destroy | status | diff | template | lint | sync | secrets | configure | tenant
+Commands: apply | destroy | status | diff | template | lint | sync | secrets | configure | tenant | e2e
 Profiles: core | full | private-rules
           (member is an alias for private-rules; dockerhub is an alias for full)
 Clouds:   onprem | eks | gke | aks
@@ -29,6 +29,8 @@ Configure:      --tms-config-path DIR --admin-url URL --newman --truncate
                 --skip-auth --auth-user USER --auth-password PASS --skip-restart
                 (--auth is accepted and is the default)
 Tenant:         --domain tazama.org --tenant-id TAZAMA --tenant-password PASS [--keycloak-url URL]
+E2E:            --postman-path DIR --collection FILE --tms-url HOST:PORT --admin-url URL
+                --auth-url HOST:PORT --keycloak-url URL --skip-auth
 EOF
 }
 
@@ -83,6 +85,10 @@ TENANT_DOMAIN=""
 TENANT_ID_FLAG=""
 TENANT_PASSWORD=""
 KEYCLOAK_URL_FLAG=""
+AUTH_URL_FLAG=""
+POSTMAN_PATH=""
+COLLECTION_FLAG=""
+TMS_URL_FLAG=""
 
 need_value() {
   local flag="$1"
@@ -177,6 +183,30 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --keycloak-url=*) KEYCLOAK_URL_FLAG="${arg#*=}"; shift ;;
+    --auth-url)
+      need_value "$arg" "${2:-}"
+      AUTH_URL_FLAG="$2"
+      shift 2
+      ;;
+    --auth-url=*) AUTH_URL_FLAG="${arg#*=}"; shift ;;
+    --postman-path)
+      need_value "$arg" "${2:-}"
+      POSTMAN_PATH="$2"
+      shift 2
+      ;;
+    --postman-path=*) POSTMAN_PATH="${arg#*=}"; shift ;;
+    --collection)
+      need_value "$arg" "${2:-}"
+      COLLECTION_FLAG="$2"
+      shift 2
+      ;;
+    --collection=*) COLLECTION_FLAG="${arg#*=}"; shift ;;
+    --tms-url)
+      need_value "$arg" "${2:-}"
+      TMS_URL_FLAG="$2"
+      shift 2
+      ;;
+    --tms-url=*) TMS_URL_FLAG="${arg#*=}"; shift ;;
     --relay-efrup)
       need_value "$arg" "${2:-}"
       RELAY_EFRUP="$2"
@@ -289,7 +319,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$COMMAND" in
-  apply|destroy|status|diff|template|lint|sync|secrets|configure|tenant) ;;
+  apply|destroy|status|diff|template|lint|sync|secrets|configure|tenant|e2e) ;;
   *)
     echo "Unknown command: $COMMAND" >&2
     usage >&2
@@ -349,7 +379,7 @@ fi
 export TAZAMA_CLOUD="$CLOUD"
 export TAZAMA_SIZING="$SIZING"
 
-if [[ "$COMMAND" != "secrets" && "$COMMAND" != "configure" && "$COMMAND" != "tenant" ]]; then
+if [[ "$COMMAND" != "secrets" && "$COMMAND" != "configure" && "$COMMAND" != "tenant" && "$COMMAND" != "e2e" ]]; then
   if ! command -v helmfile >/dev/null 2>&1; then
     echo "helmfile is not on PATH. Install https://github.com/helmfile/helmfile/releases and retry." >&2
     exit 1
@@ -499,6 +529,65 @@ resolve_tms_config() {
   echo "  git clone https://github.com/frmscoe/tms-configuration" >&2
   echo "This wrapper does not vendor that repo. The collection and curl payloads stay in the private clone." >&2
   exit 1
+}
+
+resolve_postman() {
+  local dir env_file newman_dir
+  local candidates=()
+  if [[ -n "$POSTMAN_PATH" ]]; then
+    candidates+=("$POSTMAN_PATH")
+  fi
+  if [[ -n "${TAZAMA_POSTMAN:-}" ]]; then
+    candidates+=("$TAZAMA_POSTMAN")
+  fi
+  candidates+=("$ROOT/../postman" "$ROOT/../postman-main")
+  for dir in "${candidates[@]}"; do
+    [[ -z "$dir" ]] && continue
+    env_file="$dir/environments/Tazama-Docker-Compose.postman_environment.json"
+    newman_dir="$dir/Newman"
+    if [[ -f "$env_file" && -d "$newman_dir" ]]; then
+      cd "$dir"
+      pwd
+      cd "$ROOT"
+      return 0
+    fi
+  done
+  echo "tazama-lf/postman was not found. Clone it next to tazama-Helms, or pass --postman-path / set TAZAMA_POSTMAN." >&2
+  echo "  git clone https://github.com/tazama-lf/postman" >&2
+  echo "This wrapper does not vendor that repo. The end-to-end collections stay in the clone." >&2
+  exit 1
+}
+
+newman_host() {
+  local url="${1:-}" default_port="$2"
+  url="${url#http://}"
+  url="${url#https://}"
+  url="${url%/}"
+  if [[ -z "$url" ]]; then
+    url="localhost"
+  fi
+  if [[ "$url" != *:* ]]; then
+    url="${url}:${default_port}"
+  fi
+  printf '%s' "$url"
+}
+
+host_name() {
+  local hp="$1"
+  printf '%s' "${hp%:*}"
+}
+
+host_port() {
+  local hp="$1"
+  printf '%s' "${hp##*:}"
+}
+
+is_local_host() {
+  local host="$1"
+  case "$host" in
+    localhost|127.0.0.1|'[::1]') return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 wait_tcp() {
@@ -747,6 +836,104 @@ run_tenant() {
   fi
 }
 
+run_e2e() {
+  if ! command -v kubectl >/dev/null 2>&1; then
+    echo "kubectl is not on PATH. Install https://kubernetes.io/docs/tasks/tools/ and retry." >&2
+    exit 1
+  fi
+  if ! command -v newman >/dev/null 2>&1; then
+    echo "Newman is not on PATH. Install it with: npm install -g newman" >&2
+    exit 1
+  fi
+
+  local postman_root env_file collection_file
+  postman_root="$(resolve_postman)"
+  env_file="$postman_root/environments/Tazama-Docker-Compose.postman_environment.json"
+  local auth_collection="$postman_root/Newman/Newman - 4.1. (AUTH) Public GitHub End-to-End test - tenant-001.postman_collection.json"
+  local noauth_collection="$postman_root/Newman/Newman - 2.1. (NO-AUTH) Public DockerHub End-to-End Test.postman_collection.json"
+
+  if [[ -n "$COLLECTION_FLAG" ]]; then
+    if [[ "$COLLECTION_FLAG" = /* || -f "$COLLECTION_FLAG" ]]; then
+      collection_file="$COLLECTION_FLAG"
+    else
+      collection_file="$postman_root/$COLLECTION_FLAG"
+    fi
+  elif [[ "$SKIP_AUTH" -eq 1 ]]; then
+    collection_file="$noauth_collection"
+  else
+    collection_file="$auth_collection"
+  fi
+  if [[ ! -f "$collection_file" ]]; then
+    echo "Collection not found: $collection_file" >&2
+    exit 1
+  fi
+
+  local tms_hp admin_hp auth_hp kc_hp
+  tms_hp="$(newman_host "${TMS_URL_FLAG:-localhost:3000}" 3000)"
+  admin_hp="$(newman_host "${ADMIN_URL_FLAG:-${ADMIN_URL:-localhost:5100}}" 5100)"
+  auth_hp="$(newman_host "${AUTH_URL_FLAG:-localhost:3020}" 3020)"
+  kc_hp="$(newman_host "${KEYCLOAK_URL_FLAG:-localhost:8080}" 8080)"
+  local tms_port admin_port auth_port kc_port
+  tms_port="$(host_port "$tms_hp")"
+  admin_port="$(host_port "$admin_hp")"
+  auth_port="$(host_port "$auth_hp")"
+  kc_port="$(host_port "$kc_hp")"
+
+  local pf_pids=()
+  cleanup_pf() {
+    local pid
+    for pid in "${pf_pids[@]:-}"; do
+      kill "$pid" >/dev/null 2>&1 || true
+    done
+  }
+  trap cleanup_pf EXIT
+
+  echo "Running Postman end-to-end from $postman_root"
+  echo "Collection: $collection_file"
+  echo "TMS=$tms_hp (Helm is 3000; Docker Compose env file still says 5000)"
+  echo "admin=$admin_hp auth=$auth_hp keycloak=$kc_hp"
+  if [[ "$SKIP_AUTH" -eq 0 ]]; then
+    echo "Unauthenticated POSTs to TMS return 401 when AUTHENTICATION is on; that is expected."
+  fi
+
+  if is_local_host "$(host_name "$tms_hp")"; then
+    echo "Port-forwarding svc/tms-service ${tms_port}:${tms_port} ..."
+    kubectl port-forward -n tazama svc/tms-service "${tms_port}:${tms_port}" >/dev/null 2>&1 &
+    pf_pids+=("$!")
+    wait_tcp 127.0.0.1 "$tms_port"
+  fi
+  if is_local_host "$(host_name "$admin_hp")"; then
+    echo "Port-forwarding svc/admin-service ${admin_port}:${admin_port} ..."
+    kubectl port-forward -n tazama svc/admin-service "${admin_port}:${admin_port}" >/dev/null 2>&1 &
+    pf_pids+=("$!")
+    wait_tcp 127.0.0.1 "$admin_port"
+  fi
+  if [[ "$SKIP_AUTH" -eq 0 ]]; then
+    if is_local_host "$(host_name "$auth_hp")"; then
+      echo "Port-forwarding svc/auth-service ${auth_port}:${auth_port} ..."
+      kubectl port-forward -n tazama svc/auth-service "${auth_port}:${auth_port}" >/dev/null 2>&1 &
+      pf_pids+=("$!")
+      wait_tcp 127.0.0.1 "$auth_port"
+    fi
+    if is_local_host "$(host_name "$kc_hp")"; then
+      echo "Port-forwarding svc/keycloak ${kc_port}:${kc_port} ..."
+      kubectl port-forward -n tazama svc/keycloak "${kc_port}:${kc_port}" >/dev/null 2>&1 &
+      pf_pids+=("$!")
+      wait_tcp 127.0.0.1 "$kc_port"
+    fi
+  fi
+
+  echo "Running Newman..."
+  newman run "$collection_file" -e "$env_file" \
+    --env-var "tazamaTMSUrl=$tms_hp" \
+    --env-var "tazamaAdminUrl=$admin_hp" \
+    --env-var "tazamaAuthUrl=$auth_hp" \
+    --env-var "keycloakUrl=$kc_hp" \
+    --timeout-request 120000 \
+    --delay-request 500
+  echo "E2E collection completed."
+}
+
 if [[ "$COMMAND" == "configure" ]]; then
   run_configure
   exit 0
@@ -754,6 +941,11 @@ fi
 
 if [[ "$COMMAND" == "tenant" ]]; then
   run_tenant
+  exit 0
+fi
+
+if [[ "$COMMAND" == "e2e" ]]; then
+  run_e2e
   exit 0
 fi
 
