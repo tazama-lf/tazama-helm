@@ -16,6 +16,7 @@ When the user asks which wrapper flags to combine (CMS, BIAR, relays, selectors,
 - On-prem ingress is NodePort. LoadBalancer on Kind hangs Helm `--wait`.
 - TMS port **3000**, admin **5100**. Not Docker Compose 5000.
 - No Hasura. Configuration is admin-service (`.\tazama.cmd configure -Truncate`). Core already has sample 901/902; skip `-Truncate` and you hit `rule_pkey`.
+- E2E is `.\tazama.cmd e2e` against a local [tazama-lf/postman](https://github.com/tazama-lf/postman) clone (Newman 4.1 AUTH, admin-service report, TMS 3000). Do not vendor that repo. Do not run the Hasura GUI collection.
 - Helmfile must be 1.x. Never commit `values/secrets.yaml`.
 
 ## Default first install

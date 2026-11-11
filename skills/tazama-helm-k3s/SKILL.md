@@ -44,6 +44,7 @@ Omitted flags leave the profile YAML unchanged. Combine any package flags on one
 | `secrets` | Write `values/secrets.yaml` only (no cluster) |
 | `configure` | Load rules/typologies/network map from a local **tms-configuration** clone into admin-service |
 | `tenant` | Run tazama-stack `add-tenant` against Keycloak (`TAZAMA.ORG` child groups and 12 users) |
+| `e2e` | Run the public Postman AUTH collection via Newman against TMS (needs a local **postman** clone) |
 
 Defaults if omitted: command `apply`, profile `core`, cloud `onprem`, sizing `standard`.
 
@@ -239,6 +240,25 @@ Expect `cfg` `4.0.0`, tenant `DEFAULT`, `active` `true`.
 
 Do not commit the private collection into this repo.
 
+## End-to-end tests (public postman clone)
+
+`configure` injects config. `e2e` posts pacs.008 / pacs.002 to TMS and reads the admin-service report. Clone [tazama-lf/postman](https://github.com/tazama-lf/postman) next to this repo (or `-PostmanPath` / `TAZAMA_POSTMAN`). Install Newman (`npm install -g newman`). Default collection is **Newman 4.1 AUTH GitHub tenant-001** (admin-service, no Hasura). Helm TMS is **3000**, not Docker Compose 5000. Unauthenticated posts return 401 when AUTH is on; that is expected. Load a full map with `configure -Truncate` first.
+
+```powershell
+.\tazama.cmd e2e
+.\tazama.cmd e2e -PostmanPath "H:\path\to\postman"
+.\tazama.cmd e2e -SkipAuth
+.\tazama.cmd e2e -Collection "Newman\Newman - 4.2. (AUTH) Public GitHub End-to-End test - tenant-002.postman_collection.json"
+```
+
+```bash
+./tazama.sh e2e
+./tazama.sh e2e --postman-path /path/to/postman
+./tazama.sh e2e --skip-auth
+```
+
+`-SkipAuth` / `--skip-auth` uses **Newman 2.1 NO-AUTH**. Do not run GUI collection **2.2 AUTH DockerHub** against this stack (Hasura steps). Do not vendor the postman repo.
+
 ## Keycloak tenant groups (TAZAMA.ORG)
 
 The realm import is the tazama-stack skeleton only. Nested domain groups and `tazama-api-client` are **not** in that JSON. After Keycloak is Ready:
@@ -286,5 +306,6 @@ If `$env:KUBECONFIG` is set, the wrapper passes `--kubeconfig`.
 ./tazama.sh sync core onprem --no-auth
 ./tazama.sh sync core onprem --empty-realm
 ./tazama.sh configure --truncate --auth-user tazama-api-client@tazama.org --auth-password password
+./tazama.sh e2e
 ./tazama.sh destroy core onprem name=tms-service
 ```

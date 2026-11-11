@@ -42,6 +42,7 @@ Install:
 - [ ] 6. TMS health (port-forward 3000 or ingress)
 - [ ] 7. Optional: load tms-configuration via `configure -Truncate`
 - [ ] 8. Optional: Keycloak tenant groups via `tenant` (TAZAMA.ORG + 12 users)
+- [ ] 9. Optional: Postman e2e via `e2e` (needs a local tazama-lf/postman clone and Newman)
 ```
 
 Ask the user only if the target cluster or profile is ambiguous. If they said “install it”, default to **core / onprem** on whatever cluster `kubectl` already points at. If there is no cluster and Docker is available, create Kind `tazama-cluster`.
@@ -152,6 +153,12 @@ Keycloak `--import-realm` only loads the skeleton (same JSON as tazama-stack). N
 ```
 
 TMS test traffic: pacs.008 / pacs.002 to `http://localhost:3000`. Until a full map is activated, Event Director rejects pacs.008 (`txTp` missing). Results: database `evaluation`, table `evaluation`.
+
+After `configure -Truncate`, run the public Postman AUTH collection (Newman 4.1 tenant-001, admin-service report, TMS 3000). Clone [tazama-lf/postman](https://github.com/tazama-lf/postman) next to this repo. Do not vendor it. Unauthenticated posts return 401 when AUTH is on:
+
+```powershell
+.\tazama.cmd e2e
+```
 
 ## After install (what is running)
 
