@@ -107,6 +107,12 @@ Keycloak with groups/roles but no login users (then create a tenant before confi
 .\tazama.cmd configure -Truncate -AuthUser tazama-api-client@tazama.org -AuthPassword password
 ```
 
+```bash
+./tazama.sh sync core onprem --empty-realm
+./tazama.sh tenant
+./tazama.sh configure --truncate --auth-user tazama-api-client@tazama.org --auth-password password
+```
+
 Core + CMS:
 
 ```powershell
@@ -242,7 +248,7 @@ Do not commit the private collection into this repo.
 
 ## End-to-end tests (public postman clone)
 
-`configure` injects config. `e2e` posts pacs.008 / pacs.002 to TMS and reads the admin-service report. Clone [tazama-lf/postman](https://github.com/tazama-lf/postman) next to this repo (or `-PostmanPath` / `TAZAMA_POSTMAN`). Install Newman (`npm install -g newman`). Default collection is **Newman 4.1 AUTH GitHub tenant-001** (admin-service, no Hasura). Helm TMS is **3000**, not Docker Compose 5000. Unauthenticated posts return 401 when AUTH is on; that is expected. Load a full map with `configure -Truncate` first.
+`configure` injects config. `e2e` posts pacs.008 / pacs.002 to TMS and reads the admin-service report. Clone [tazama-lf/postman](https://github.com/tazama-lf/postman) next to this repo (or `-PostmanPath` / `--postman-path` / `TAZAMA_POSTMAN`). Install Newman (`npm install -g newman`). Default collection is **Newman 4.1 AUTH GitHub tenant-001** (admin-service, no Hasura). Helm TMS is **3000**, not Docker Compose 5000. Unauthenticated posts return 401 when AUTH is on; that is expected. Load a full map with `configure -Truncate` / `configure --truncate` first. Windows uses `.\tazama.cmd`; Linux and macOS use `./tazama.sh`.
 
 ```powershell
 .\tazama.cmd e2e
@@ -255,6 +261,7 @@ Do not commit the private collection into this repo.
 ./tazama.sh e2e
 ./tazama.sh e2e --postman-path /path/to/postman
 ./tazama.sh e2e --skip-auth
+./tazama.sh e2e --collection "Newman/Newman - 4.2. (AUTH) Public GitHub End-to-End test - tenant-002.postman_collection.json"
 ```
 
 `-SkipAuth` / `--skip-auth` uses **Newman 2.1 NO-AUTH**. Do not run GUI collection **2.2 AUTH DockerHub** against this stack (Hasura steps). Do not vendor the postman repo.
@@ -295,7 +302,7 @@ helmfile -e core -f helmfile.yaml.gotmpl -l name=cms-backend destroy
 helmfile -e core -f helmfile.yaml.gotmpl -l tier=rules apply
 ```
 
-If `$env:KUBECONFIG` is set, the wrapper passes `--kubeconfig`.
+If `$env:KUBECONFIG` or `KUBECONFIG` is set, the wrapper passes `--kubeconfig`.
 
 ## bash equivalents
 
@@ -305,7 +312,10 @@ If `$env:KUBECONFIG` is set, the wrapper passes `--kubeconfig`.
 ./tazama.sh sync core onprem --extensions --tools
 ./tazama.sh sync core onprem --no-auth
 ./tazama.sh sync core onprem --empty-realm
+./tazama.sh tenant
+./tazama.sh configure --truncate
 ./tazama.sh configure --truncate --auth-user tazama-api-client@tazama.org --auth-password password
 ./tazama.sh e2e
+./tazama.sh e2e --skip-auth
 ./tazama.sh destroy core onprem name=tms-service
 ```
