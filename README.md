@@ -602,6 +602,11 @@ kubectl rollout restart -n tazama deploy/event-director deploy/typology-processo
 kubectl rollout status -n tazama deploy/event-director
 ```
 
+```bash
+kubectl rollout restart -n tazama deploy/event-director deploy/typology-processor deploy/event-adjudicator
+kubectl rollout status -n tazama deploy/event-director
+```
+
 ### Send test traffic
 
 Keep TMS port-forwarded (`svc/tms-service` `3000:3000`). Send pacs.008 and pacs.002 to `http://localhost:3000` using the messages in tms-configuration (Postman collection or raw ISO XML). Tenant id is `DEFAULT`. Or run the wrapper in [End-to-end tests](#end-to-end-tests).
@@ -614,15 +619,21 @@ Results land in Postgres database `evaluation`, table `evaluation`:
 kubectl exec -it -n tazama postgresql-0 -- psql -U postgres -d evaluation -c "SELECT * FROM evaluation ORDER BY 1 DESC LIMIT 20;"
 ```
 
+```bash
+kubectl exec -it -n tazama postgresql-0 -- psql -U postgres -d evaluation -c "SELECT * FROM evaluation ORDER BY 1 DESC LIMIT 20;"
+```
+
 NATS also carries evaluation output (the relays in core publish to JetStream). You do not need a GraphQL overlay to confirm a hit.
 
 ## End-to-end tests
 
-`configure` loads rules, typologies, and the network map into admin-service. `e2e` is a later step: it runs the public Postman collection against a live cluster (pacs.008 and pacs.002 into TMS, then an admin-service report). It does not inject configuration.
+`configure` loads rules, typologies, and the network map into admin-service. `e2e` is a later step: it runs the public Postman collection against a live cluster (pacs.008 and pacs.002 into TMS, then an admin-service report). It does not inject configuration. Windows: `.\tazama.cmd`. Linux and macOS: `./tazama.sh`.
 
 This stack has no Hasura. The default collection is **Newman 4.1 (AUTH) Public GitHub End-to-End test - tenant-001**, which reads results from admin-service. Do not run the GUI **2.2 AUTH DockerHub** collection against Helm; that still has Hasura steps.
 
 The collection lives in [tazama-lf/postman](https://github.com/tazama-lf/postman). Clone it next to this repo. The wrapper does not vendor it.
+
+Windows:
 
 ```powershell
 git clone https://github.com/tazama-lf/postman
@@ -630,9 +641,12 @@ npm install -g newman
 .\tazama.cmd e2e
 ```
 
+Linux or macOS:
+
 ```bash
 git clone https://github.com/tazama-lf/postman
 npm install -g newman
+chmod +x tazama.sh
 ./tazama.sh e2e
 ```
 
@@ -645,7 +659,7 @@ What the default AUTH collection does:
 3. Posts the same messages **with** a JWT. TMS should accept them.
 4. Reads the evaluation report from **admin-service** (`getreportbymsgid`).
 
-Load a full map first (`configure -Truncate`) and wait for the ED / TP / EA rollout, or the authenticated posts succeed and the report step has nothing to show.
+Load a full map first (`.\tazama.cmd configure -Truncate` or `./tazama.sh configure --truncate`) and wait for the ED / TP / EA rollout, or the authenticated posts succeed and the report step has nothing to show.
 
 ```powershell
 .\tazama.cmd e2e
