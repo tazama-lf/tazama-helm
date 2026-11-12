@@ -181,6 +181,26 @@ $env:KUBECONFIG = "$PWD\infra\aws\kubeconfig.yaml"
 
 OpenTofu uses the AWS CLI credentials already on your laptop (`aws configure` / `aws sts get-caller-identity`). SSH uses a generated `id_rsa`. Lens uses the copied `kubeconfig.yaml`. Details: [infra/aws/README.md](infra/aws/README.md). Use `-Cloud onprem` (k3s local-path). This is not Elastic Kubernetes Service.
 
+#### GCP k3s on one Compute Engine VM (OpenTofu, not GKE)
+
+Same disposable k3s pattern as AWS. Details: [infra/gcp/README.md](infra/gcp/README.md).
+
+```powershell
+.\infra\gcp\up.cmd -Sizing medium -Project YOUR_PROJECT_ID
+$env:KUBECONFIG = "$PWD\infra\gcp\kubeconfig.yaml"
+.\tazama.cmd sync -Profile core -Cloud onprem -Sizing medium
+.\infra\gcp\down.cmd
+```
+
+```bash
+./infra/gcp/up.sh --sizing medium --project YOUR_PROJECT_ID
+export KUBECONFIG="$PWD/infra/gcp/kubeconfig.yaml"
+./tazama.sh sync core onprem --sizing medium
+./infra/gcp/down.sh
+```
+
+`-Sizing small|medium|large` sets `e2-medium` / `e2-standard-2` / `e2-standard-4` and the Helm replica tier. Use `-Cloud onprem`. This is not Google Kubernetes Engine.
+
 #### Amazon EKS, Google GKE, Azure AKS (shared or production)
 
 Create the managed cluster with your usual cloud process (eksctl, gcloud, az, Terraform). Install the disk CSI driver if the cluster does not already have it (EKS: EBS CSI and a `gp3` StorageClass; GKE: `standard-rwo` or `premium-rwo`; AKS: `managed-csi`). Authenticate so `kubectl get nodes` lists those nodes.
