@@ -14,11 +14,12 @@ For a from-scratch install (tools, cluster, sync, verify), use skill `tazama-hel
 
 Run from `tazama-Helms/`. **Windows:** `.\tazama.cmd` (never `.\tazama.ps1`). **Linux/macOS:** `./tazama.sh`.
 
-This AWS k3s box: set kubeconfig, then `-Cloud onprem` (not `eks`).
+This AWS or GCP k3s box: set kubeconfig, then `-Cloud onprem` (not `eks` / `gke`).
 
 ```powershell
 cd tazama-Helms
 $env:KUBECONFIG = "$PWD\infra\aws\kubeconfig.yaml"
+# or $env:KUBECONFIG = "$PWD\infra\gcp\kubeconfig.yaml"
 ```
 
 Shape:

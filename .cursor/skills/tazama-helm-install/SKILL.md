@@ -69,7 +69,8 @@ Pick one:
 | Situation | Action | Cloud flag |
 | --- | --- | --- |
 | Nodes already listed | Use that cluster | `onprem` unless it is clearly EKS/GKE/AKS |
-| `tazama-Helms/infra/aws/kubeconfig.yaml` exists | `$env:KUBECONFIG` to that file (k3s box) | `onprem` |
+| `infra/aws/kubeconfig.yaml` exists | `$env:KUBECONFIG` to that file (AWS k3s box) | `onprem` |
+| `infra/gcp/kubeconfig.yaml` exists | `$env:KUBECONFIG` to that file (GCP k3s box) | `onprem` |
 | No cluster, Docker running | `kind create cluster --name tazama-cluster` | `onprem` |
 | User named EKS/GKE/AKS | They must already have that kubecontext | `eks` / `gke` / `aks` plus `-IngressDomain` |
 

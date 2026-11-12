@@ -9,16 +9,15 @@ charts/**/charts/
 .DS_Store
 Thumbs.db
 
-# AWS k3s test cluster (OpenTofu)
-infra/aws/.terraform/
-infra/aws/*.tfstate
-infra/aws/*.tfstate.*
-infra/aws/tfplan
-infra/aws/terraform.tfvars
-infra/aws/id_rsa
-infra/aws/id_rsa.pub
-infra/aws/kubeconfig.yaml
-infra/aws/crash.log
-infra/aws/*.auto.tfvars
-infra/aws/*.auto.tfvars
-infra/aws/.terraform.tfstate.lock.info
+# k3s test clusters (OpenTofu): aws, gcp, azure
+infra/*/.terraform/
+infra/*/*.tfstate
+infra/*/*.tfstate.*
+infra/*/tfplan
+infra/*/terraform.tfvars
+infra/*/id_rsa
+infra/*/id_rsa.pub
+infra/*/kubeconfig.yaml
+infra/*/crash.log
+infra/*/*.auto.tfvars
+infra/*/.terraform.tfstate.lock.info
