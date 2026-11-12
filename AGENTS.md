@@ -15,7 +15,8 @@ When the user asks which wrapper flags to combine (CMS, BIAR, relays, selectors,
 - Kind / k3s / kubeadm / Docker Desktop Kubernetes → `-Cloud onprem`. Never mix Kind with `-Cloud eks`.
 - On-prem ingress is NodePort. LoadBalancer on Kind hangs Helm `--wait`.
 - TMS port **3000**, admin **5100**. Not Docker Compose 5000.
-- No Hasura. Configuration is admin-service (`.\tazama.cmd configure -Truncate`). Core already has sample 901/902; skip `-Truncate` and you hit `rule_pkey`.
+- No Hasura. Configuration is admin-service: `.\tazama.cmd configure -Truncate` (Windows) or `./tazama.sh configure --truncate` (Linux/macOS). Core already has sample 901/902; skip truncate and you hit `rule_pkey`.
+- E2E is `.\tazama.cmd e2e` or `./tazama.sh e2e` against a local [tazama-lf/postman](https://github.com/tazama-lf/postman) clone (Newman 4.1 AUTH, admin-service report, TMS 3000). Do not vendor that repo. Do not run the Hasura GUI collection.
 - Helmfile must be 1.x. Never commit `values/secrets.yaml`.
 
 ## Default first install
@@ -24,11 +25,15 @@ When the user asks which wrapper flags to combine (CMS, BIAR, relays, selectors,
 .\tazama.cmd sync -Profile core -Cloud onprem
 kubectl get pods -n tazama
 kubectl port-forward -n tazama svc/tms-service 3000:3000
+.\tazama.cmd configure -Truncate
+.\tazama.cmd e2e
 ```
 
 ```bash
 chmod +x tazama.sh
 ./tazama.sh sync core onprem
+./tazama.sh configure --truncate
+./tazama.sh e2e
 ```
 
 Full playbook: `skills/tazama-helm-install/SKILL.md`.

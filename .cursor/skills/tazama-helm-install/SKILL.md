@@ -40,8 +40,9 @@ Install:
 - [ ] 4. sync the requested profile/cloud
 - [ ] 5. pods Ready in namespace tazama
 - [ ] 6. TMS health (port-forward 3000 or ingress)
-- [ ] 7. Optional: load tms-configuration via `configure -Truncate`
+- [ ] 7. Optional: load tms-configuration via `configure -Truncate` / `configure --truncate`
 - [ ] 8. Optional: Keycloak tenant groups via `tenant` (TAZAMA.ORG + 12 users)
+- [ ] 9. Optional: Postman e2e via `e2e` (needs a local tazama-lf/postman clone and Newman)
 ```
 
 Ask the user only if the target cluster or profile is ambiguous. If they said “install it”, default to **core / onprem** on whatever cluster `kubectl` already points at. If there is no cluster and Docker is available, create Kind `tazama-cluster`.
@@ -79,9 +80,9 @@ Helmfile creates namespace `tazama`. Do not require `kubectl create ns`.
 
 ### 3. Secrets
 
-If `tazama-Helms/values/secrets.yaml` is missing, the wrapper copies `values/secrets.example.yaml` and fills random passwords plus an Auth RSA pair. You may run `.\tazama.cmd secrets` first (no cluster). Never commit that file. Never paste `kubectl get secret` base64 back into it.
+If `tazama-Helms/values/secrets.yaml` is missing, the wrapper copies `values/secrets.example.yaml` and fills random passwords plus an Auth RSA pair. You may run `.\tazama.cmd secrets` or `./tazama.sh secrets` first (no cluster). Never commit that file. Never paste `kubectl get secret` base64 back into it.
 
-To rotate: `.\tazama.cmd secrets -GenerateSecrets` then sync again. Changing `postgres.password` after Postgres has initialized does not rewrite the role; wipe the PVC or `ALTER USER`.
+To rotate: `.\tazama.cmd secrets -GenerateSecrets` or `./tazama.sh secrets --generate-secrets`, then sync again. Changing `postgres.password` after Postgres has initialized does not rewrite the role; wipe the PVC or `ALTER USER`.
 
 ### 4. Deploy
 
@@ -108,6 +109,10 @@ Cloud examples (kubeconfig already targeting that cluster):
 .\tazama.cmd sync -Profile core -Cloud eks -IngressDomain tm.example.com
 ```
 
+```bash
+./tazama.sh sync core eks --ingress-domain tm.example.com
+```
+
 `sync` can take many minutes (Postgres init SQL, Keycloak realm import, 30+ rule images). Set a long command timeout. Do not kill it at the first idle period.
 
 If Helm hangs ~900s on ingress-nginx: on-prem Service type must be NodePort, not LoadBalancer.
@@ -127,7 +132,7 @@ kubectl port-forward -n tazama svc/tms-service 3000:3000
 kubectl port-forward -n tazama svc/admin-service 5100:5100
 ```
 
-Windows: `curl.exe http://localhost:3000` (not the `curl` alias). Expect `{"status":"UP"}`.
+Windows: `curl.exe http://localhost:3000` (not the `curl` alias). Linux/macOS: `curl http://localhost:3000`. Expect `{"status":"UP"}`.
 
 With ingress: `http://tms.<domain>` and `http://admin.<domain>`.
 
@@ -135,13 +140,17 @@ With ingress: `http://tms.<domain>` and `http://admin.<domain>`.
 
 Core already has sample rules 901/902 on `pacs.002.001.12` tenant `DEFAULT`. A full typology set needs private [frmscoe/tms-configuration](https://github.com/frmscoe/tms-configuration).
 
-If that repo is cloned next to `tazama-Helms/` (or `-TmsConfigPath`):
+If that repo is cloned next to `tazama-Helms/` (or `-TmsConfigPath` / `--tms-config-path`):
 
 ```powershell
 .\tazama.cmd configure -Truncate
 ```
 
-Use `-Truncate` on the first load. Sample 901/902 is already in Postgres; without it admin-service returns 500 `rule_pkey`. That port-forwards admin-service, fetches a JWT (`tazama-user@tazama.org` unless `-SkipAuth` or `-AuthUser`), POSTs `curl/` payloads, activates `network_map/4.0.0` with cascade reload, and restarts ED / TP / EA.
+```bash
+./tazama.sh configure --truncate
+```
+
+Use `-Truncate` / `--truncate` on the first load. Sample 901/902 is already in Postgres; without it admin-service returns 500 `rule_pkey`. That port-forwards admin-service, fetches a JWT (`tazama-user@tazama.org` unless `-SkipAuth` / `--skip-auth` or `-AuthUser` / `--auth-user`), POSTs `curl/` payloads, activates `network_map/4.0.0` with cascade reload, and restarts ED / TP / EA.
 
 Do not install Hasura. Do not run the Hasura Postman folder.
 
@@ -151,7 +160,21 @@ Keycloak `--import-realm` only loads the skeleton (same JSON as tazama-stack). N
 .\tazama.cmd tenant
 ```
 
+```bash
+./tazama.sh tenant
+```
+
 TMS test traffic: pacs.008 / pacs.002 to `http://localhost:3000`. Until a full map is activated, Event Director rejects pacs.008 (`txTp` missing). Results: database `evaluation`, table `evaluation`.
+
+After `configure -Truncate` / `configure --truncate`, run the public Postman AUTH collection (Newman 4.1 tenant-001, admin-service report, TMS 3000). Clone [tazama-lf/postman](https://github.com/tazama-lf/postman) next to this repo. Do not vendor it. Unauthenticated posts return 401 when AUTH is on:
+
+```powershell
+.\tazama.cmd e2e
+```
+
+```bash
+./tazama.sh e2e
+```
 
 ## After install (what is running)
 
@@ -167,6 +190,6 @@ TMS test traffic: pacs.008 / pacs.002 to `http://localhost:3000`. Until a full m
 | ImagePullBackOff | Docker Hub rate limit; set pull secret in `values/secrets.yaml`. |
 | Keycloak CrashLoop on reused PVC | `CREATE DATABASE keycloak;` if missing. Realm ConfigMap `keycloak-realm`. |
 | ED: no network map for DEFAULT | Load/activate tms-configuration, then restart ED/TP/EA. |
-| 500 `rule_pkey` on configure | Sample 901/902 already in Postgres. Use `.\tazama.cmd configure -Truncate`. |
+| 500 `rule_pkey` on configure | Sample 901/902 already in Postgres. Use `.\tazama.cmd configure -Truncate` or `./tazama.sh configure --truncate`. |
 
 Do not `destroy` unless the user asked to uninstall.

@@ -21,6 +21,7 @@ This is the Helm/Helmfile form of [tazama-stack](https://github.com/tazama-lf/ta
 - [Wrapper flags](#wrapper-flags)
 - [Optional packages](#optional-packages)
 - [Loading configuration](#loading-configuration)
+- [End-to-end tests](#end-to-end-tests)
 - [Relays](#relays)
 - [BIAR and the Postgres replica](#biar-and-the-postgres-replica)
 - [Profiles and clouds](#profiles-and-clouds)
@@ -601,9 +602,14 @@ kubectl rollout restart -n tazama deploy/event-director deploy/typology-processo
 kubectl rollout status -n tazama deploy/event-director
 ```
 
+```bash
+kubectl rollout restart -n tazama deploy/event-director deploy/typology-processor deploy/event-adjudicator
+kubectl rollout status -n tazama deploy/event-director
+```
+
 ### Send test traffic
 
-Keep TMS port-forwarded (`svc/tms-service` `3000:3000`). Send pacs.008 and pacs.002 to `http://localhost:3000` using the messages in tms-configuration (Postman collection or raw ISO XML). Tenant id is `DEFAULT`.
+Keep TMS port-forwarded (`svc/tms-service` `3000:3000`). Send pacs.008 and pacs.002 to `http://localhost:3000` using the messages in tms-configuration (Postman collection or raw ISO XML). Tenant id is `DEFAULT`. Or run the wrapper in [End-to-end tests](#end-to-end-tests).
 
 The sample map that ships in SQL only lists `pacs.002.001.12`. Until you load and activate a full network map, a pacs.008 is accepted by TMS but Event Director logs that there is no network-map row for that `txTp`. After the activate call above, both message types should evaluate.
 
@@ -613,7 +619,65 @@ Results land in Postgres database `evaluation`, table `evaluation`:
 kubectl exec -it -n tazama postgresql-0 -- psql -U postgres -d evaluation -c "SELECT * FROM evaluation ORDER BY 1 DESC LIMIT 20;"
 ```
 
+```bash
+kubectl exec -it -n tazama postgresql-0 -- psql -U postgres -d evaluation -c "SELECT * FROM evaluation ORDER BY 1 DESC LIMIT 20;"
+```
+
 NATS also carries evaluation output (the relays in core publish to JetStream). You do not need a GraphQL overlay to confirm a hit.
+
+## End-to-end tests
+
+`configure` loads rules, typologies, and the network map into admin-service. `e2e` is a later step: it runs the public Postman collection against a live cluster (pacs.008 and pacs.002 into TMS, then an admin-service report). It does not inject configuration. Windows: `.\tazama.cmd`. Linux and macOS: `./tazama.sh`.
+
+This stack has no Hasura. The default collection is **Newman 4.1 (AUTH) Public GitHub End-to-End test - tenant-001**, which reads results from admin-service. Do not run the GUI **2.2 AUTH DockerHub** collection against Helm; that still has Hasura steps.
+
+The collection lives in [tazama-lf/postman](https://github.com/tazama-lf/postman). Clone it next to this repo. The wrapper does not vendor it.
+
+Windows:
+
+```powershell
+git clone https://github.com/tazama-lf/postman
+npm install -g newman
+.\tazama.cmd e2e
+```
+
+Linux or macOS:
+
+```bash
+git clone https://github.com/tazama-lf/postman
+npm install -g newman
+chmod +x tazama.sh
+./tazama.sh e2e
+```
+
+That finds `../postman` (or `../postman-main`, or `-PostmanPath` / `--postman-path`, or `TAZAMA_POSTMAN`), port-forwards TMS `3000`, admin `5100`, Auth `3020`, and Keycloak `8080` when those URLs are localhost, then runs Newman. It overrides `tazamaTMSUrl` to `localhost:3000` because Helm TMS is 3000, not Docker Compose 5000.
+
+What the default AUTH collection does:
+
+1. Posts pacs.008 and pacs.002 to TMS **without** a JWT. With default `AUTHENTICATION=true` those return **401**. That is expected.
+2. Logs in through Keycloak and auth-service.
+3. Posts the same messages **with** a JWT. TMS should accept them.
+4. Reads the evaluation report from **admin-service** (`getreportbymsgid`).
+
+Load a full map first (`.\tazama.cmd configure -Truncate` or `./tazama.sh configure --truncate`) and wait for the ED / TP / EA rollout, or the authenticated posts succeed and the report step has nothing to show.
+
+```powershell
+.\tazama.cmd e2e
+.\tazama.cmd e2e -PostmanPath "H:\path\to\postman"
+.\tazama.cmd e2e -TmsUrl localhost:3000 -AdminUrl localhost:5100
+.\tazama.cmd e2e -SkipAuth
+.\tazama.cmd e2e -Collection "Newman\Newman - 4.2. (AUTH) Public GitHub End-to-End test - tenant-002.postman_collection.json"
+```
+
+```bash
+./tazama.sh e2e
+./tazama.sh e2e --postman-path /path/to/postman
+./tazama.sh e2e --tms-url localhost:3000 --admin-url localhost:5100
+./tazama.sh e2e --skip-auth
+./tazama.sh e2e --collection "Newman/Newman - 4.2. (AUTH) Public GitHub End-to-End test - tenant-002.postman_collection.json"
+```
+
+`-SkipAuth` / `--skip-auth` switches to **Newman 2.1 (NO-AUTH) Public DockerHub End-to-End Test**. Use that only if you installed with `-NoAuth`. `-Collection` / `--collection` is a path relative to the postman clone, or an absolute file.
 
 ## Relays
 
@@ -1132,6 +1196,7 @@ Wrapper arguments: PowerShell uses `-Profile`, `-Cloud`, `-Selector`, and the fl
 | First install, JWT off (lab) | `.\tazama.cmd sync -Profile core -Cloud onprem -NoAuth` | `./tazama.sh sync core onprem --no-auth` |
 | First install, Keycloak with no login users | `.\tazama.cmd sync -Profile core -Cloud onprem -EmptyRealm` | `./tazama.sh sync core onprem --empty-realm` |
 | Add Keycloak tenant groups and users (TAZAMA.ORG by default) | `.\tazama.cmd tenant` | `./tazama.sh tenant` |
+| Run Postman AUTH end-to-end via Newman (TMS 3000; needs a local postman clone) | `.\tazama.cmd e2e` | `./tazama.sh e2e` |
 | Preview the diff | `.\tazama.cmd diff -Profile core -Cloud onprem` | `./tazama.sh diff core onprem` |
 | Render YAML | `.\tazama.cmd template -Profile core -Cloud onprem -Cms` | `./tazama.sh template core onprem --cms` |
 | Status | `.\tazama.cmd status -Profile core -Cloud onprem` | `./tazama.sh status core onprem` |
