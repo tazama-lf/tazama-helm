@@ -201,6 +201,26 @@ export KUBECONFIG="$PWD/infra/gcp/kubeconfig.yaml"
 
 `-Sizing small|medium|large` sets `e2-medium` / `e2-standard-2` / `e2-standard-4` and the Helm replica tier. Use `-Cloud onprem`. This is not Google Kubernetes Engine.
 
+#### Azure k3s on one Linux VM (OpenTofu, not AKS)
+
+Same disposable k3s pattern as AWS. Details: [infra/azure/README.md](infra/azure/README.md).
+
+```powershell
+.\infra\azure\up.cmd -Sizing medium -Subscription YOUR_SUBSCRIPTION_ID
+$env:KUBECONFIG = "$PWD\infra\azure\kubeconfig.yaml"
+.\tazama.cmd sync -Profile core -Cloud onprem -Sizing medium
+.\infra\azure\down.cmd
+```
+
+```bash
+./infra/azure/up.sh --sizing medium --subscription YOUR_SUBSCRIPTION_ID
+export KUBECONFIG="$PWD/infra/azure/kubeconfig.yaml"
+./tazama.sh sync core onprem --sizing medium
+./infra/azure/down.sh
+```
+
+`-Sizing small|medium|large` sets `Standard_B2s` / `Standard_D2s_v5` / `Standard_D4s_v5` and the Helm replica tier. Use `-Cloud onprem`. This is not Azure Kubernetes Service.
+
 #### Amazon EKS, Google GKE, Azure AKS (shared or production)
 
 Create the managed cluster with your usual cloud process (eksctl, gcloud, az, Terraform). Install the disk CSI driver if the cluster does not already have it (EKS: EBS CSI and a `gp3` StorageClass; GKE: `standard-rwo` or `premium-rwo`; AKS: `managed-csi`). Authenticate so `kubectl get nodes` lists those nodes.

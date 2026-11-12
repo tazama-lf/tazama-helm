@@ -1,0 +1,44 @@
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+set -euxo pipefail
+
+EIP="${eip}"
+SSH_USER="${ssh_user}"
+HOME_DIR="/home/$${SSH_USER}"
+
+export DEBIAN_FRONTEND=noninteractive
+if ! command -v curl >/dev/null; then
+  apt-get update -y
+  apt-get install -y curl
+fi
+
+META_IP="$(curl -sfH "Metadata:true" --noproxy "*" "http://169.254.169.254/metadata/instance/network/interface/0/ipv4/ipAddress/0/publicIpAddress?api-version=2021-02-01&format=text" || true)"
+
+TLS_SANS="--tls-san $${EIP}"
+if [ -n "$${META_IP}" ]; then
+  TLS_SANS="$${TLS_SANS} --tls-san $${META_IP}"
+fi
+
+until curl -sfL https://get.k3s.io -o /tmp/install-k3s.sh; do
+  sleep 5
+done
+
+sh /tmp/install-k3s.sh \
+  --disable traefik \
+  --write-kubeconfig-mode 644 \
+  $${TLS_SANS}
+
+until k3s kubectl get nodes | grep -q ' Ready'; do
+  sleep 5
+done
+
+install -d -m 755 -o "$${SSH_USER}" -g "$${SSH_USER}" "$${HOME_DIR}"
+sed "s#https://127.0.0.1:6443#https://$${EIP}:6443#g" /etc/rancher/k3s/k3s.yaml \
+  > "$${HOME_DIR}/kubeconfig.yaml"
+chown "$${SSH_USER}:$${SSH_USER}" "$${HOME_DIR}/kubeconfig.yaml"
+chmod 600 "$${HOME_DIR}/kubeconfig.yaml"
+
+ln -sfn /usr/local/bin/k3s /usr/local/bin/kubectl
+
+touch "$${HOME_DIR}/READY"
+chown "$${SSH_USER}:$${SSH_USER}" "$${HOME_DIR}/READY"
