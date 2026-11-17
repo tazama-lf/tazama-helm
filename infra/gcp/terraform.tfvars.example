@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copy to terraform.tfvars (gitignored) if you want to pin values.
+# Prefer .\infra\gcp\up.cmd -Sizing medium -Project YOUR_PROJECT_ID
+
+project = "your-gcp-project-id"
+region  = "europe-west1"
+zone    = "europe-west1-b"
+# sizing       = "medium"   # small=e2-medium, medium=e2-standard-2, large=e2-standard-4
+# allowed_cidr = "1.2.3.4/32"

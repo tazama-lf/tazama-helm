@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copy to terraform.tfvars (gitignored) if you want to pin values.
+# Prefer .\infra\azure\up.cmd -Sizing medium -Subscription YOUR_SUBSCRIPTION_ID
+
+subscription_id = "00000000-0000-0000-0000-000000000000"
+location        = "westeurope"
+# sizing       = "medium"   # small=Standard_B2s, medium=Standard_D2s_v5, large=Standard_D4s_v5
+# allowed_cidr = "1.2.3.4/32"
