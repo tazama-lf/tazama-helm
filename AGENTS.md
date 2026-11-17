@@ -12,7 +12,7 @@ When the user asks which wrapper flags to combine (CMS, BIAR, relays, selectors,
 - Windows: `.\tazama.cmd ...` only. Never `.\tazama.ps1` (execution policy blocks it).
 - Linux/macOS: `./tazama.sh ...`.
 - First install: `sync`, not `apply`. Default: profile `core`, cloud `onprem`.
-- Kind / k3s / kubeadm / Docker Desktop Kubernetes → `-Cloud onprem`. OpenTofu boxes under `infra/aws` and `infra/gcp` are k3s: still `-Cloud onprem`, never `-Cloud eks` or `-Cloud gke`.
+- Kind / k3s / kubeadm / Docker Desktop Kubernetes → `-Cloud onprem`. OpenTofu boxes under `infra/aws`, `infra/gcp`, and `infra/azure` are k3s: still `-Cloud onprem`, never `-Cloud eks` / `gke` / `aks`.
 - On-prem ingress is NodePort. LoadBalancer on Kind hangs Helm `--wait`.
 - TMS port **3000**, admin **5100**. Not Docker Compose 5000.
 - No Hasura. Configuration is admin-service (`.\tazama.cmd configure -Truncate`). Core already has sample 901/902; skip `-Truncate` and you hit `rule_pkey`.
