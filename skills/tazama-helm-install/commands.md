@@ -11,7 +11,7 @@ Shape:
 ./tazama.sh  <command> <profile> <cloud> [--sizing <tier>] [package flags...] [--selector <label>]
 ```
 
-Commands: `sync` (first install) | `apply` | `diff` | `template` | `status` | `lint` | `destroy` | `secrets` | `configure` | `tenant`.
+Commands: `sync` (first install) | `apply` | `diff` | `template` | `status` | `lint` | `destroy` | `secrets` | `configure` | `tenant` | `e2e`.
 
 Profiles: `core` | `full` | `private-rules` (`member` = private-rules, `dockerhub` = full).
 Clouds: `onprem` | `eks` | `gke` | `aks`.
@@ -41,6 +41,7 @@ Sizing: `standard` | `small` | `medium` | `large`.
 .\tazama.cmd destroy -Profile core -Cloud onprem -Selector "name=tms-service"
 .\tazama.cmd configure -Truncate
 .\tazama.cmd tenant
+.\tazama.cmd e2e
 ```
 
 ```bash
@@ -49,6 +50,7 @@ Sizing: `standard` | `small` | `medium` | `large`.
 ./tazama.sh destroy core onprem name=tms-service
 ./tazama.sh configure --truncate
 ./tazama.sh tenant
+./tazama.sh e2e
 ```
 
 Helm does not install Kafka or RabbitMQ. Relays still consume from in-cluster NATS.

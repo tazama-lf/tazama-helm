@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("apply", "destroy", "status", "diff", "template", "lint", "sync", "secrets", "configure", "tenant")]
+  [ValidateSet("apply", "destroy", "status", "diff", "template", "lint", "sync", "secrets", "configure", "tenant", "e2e")]
   [string]$Command = "apply",
 
   [ValidateSet("core", "full", "private-rules", "member", "dockerhub")]
@@ -57,7 +57,12 @@ param(
   [string]$Domain = "",
   [string]$TenantId = "",
   [string]$TenantPassword = "",
-  [string]$KeycloakUrl = ""
+  [string]$KeycloakUrl = "",
+  [string]$AuthUrl = "",
+
+  [string]$PostmanPath = "",
+  [string]$Collection = "",
+  [string]$TmsUrl = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -121,7 +126,7 @@ function Resolve-RequiredBin {
 
 $helmfile = $null
 $helm = $null
-if ($Command -notin @("secrets", "configure", "tenant")) {
+if ($Command -notin @("secrets", "configure", "tenant", "e2e")) {
   $helmfile = Resolve-RequiredBin -Name "helmfile" -Hint "Install https://github.com/helmfile/helmfile/releases and retry."
   $helm = Resolve-RequiredBin -Name "helm" -Hint "Install https://helm.sh/docs/intro/install/ and retry."
 }
@@ -322,6 +327,74 @@ tms-configuration was not found. Clone the private repo (GitHub access required)
 
 This wrapper does not vendor that repo. The collection and curl payloads stay in the private clone.
 "@
+}
+
+function Resolve-TazamaPostmanRoot {
+  $candidates = New-Object System.Collections.Generic.List[string]
+  if (-not [string]::IsNullOrWhiteSpace($PostmanPath)) {
+    [void]$candidates.Add($PostmanPath.Trim())
+  }
+  if (-not [string]::IsNullOrWhiteSpace($env:TAZAMA_POSTMAN)) {
+    [void]$candidates.Add($env:TAZAMA_POSTMAN.Trim())
+  }
+  $parent = Split-Path -Parent $Root
+  foreach ($name in @("postman", "postman-main")) {
+    [void]$candidates.Add((Join-Path $parent $name))
+    [void]$candidates.Add((Join-Path $parent (Join-Path ".." $name)))
+  }
+  foreach ($dir in $candidates) {
+    if ([string]::IsNullOrWhiteSpace($dir)) {
+      continue
+    }
+    $resolved = $dir
+    if (-not [System.IO.Path]::IsPathRooted($resolved)) {
+      $resolved = Join-Path $Root $resolved
+    }
+    $envFile = Join-Path $resolved "environments\Tazama-Docker-Compose.postman_environment.json"
+    $newmanDir = Join-Path $resolved "Newman"
+    if ((Test-Path -LiteralPath $envFile) -and (Test-Path -LiteralPath $newmanDir)) {
+      return (Resolve-Path -LiteralPath $resolved).Path
+    }
+  }
+  Write-Error @"
+tazama-lf/postman was not found. Clone it next to tazama-Helms, or pass -PostmanPath / set TAZAMA_POSTMAN.
+
+  git clone https://github.com/tazama-lf/postman
+
+This wrapper does not vendor that repo. The end-to-end collections stay in the clone.
+"@
+}
+
+function Get-TazamaNewmanHost {
+  param([string]$Url, [int]$DefaultPort)
+  $raw = if ([string]::IsNullOrWhiteSpace($Url)) { "localhost" } else { $Url.Trim() }
+  $raw = $raw -replace '^https?://', ''
+  $raw = $raw.TrimEnd('/')
+  if ($raw -notmatch ':\d+$') {
+    return "${raw}:${DefaultPort}"
+  }
+  return $raw
+}
+
+function Get-TazamaHostName {
+  param([string]$HostPort)
+  if ($HostPort -match '^(.*):(\d+)$') {
+    return $Matches[1]
+  }
+  return $HostPort
+}
+
+function Get-TazamaHostPortNumber {
+  param([string]$HostPort, [int]$DefaultPort)
+  if ($HostPort -match ':(\d+)$') {
+    return [int]$Matches[1]
+  }
+  return $DefaultPort
+}
+
+function Test-TazamaLocalHostName {
+  param([string]$HostName)
+  return $HostName -match '^(localhost|127\.0\.0\.1|\[::1\])$'
 }
 
 function Get-TazamaKubectlArgs {
@@ -592,6 +665,88 @@ function Invoke-TazamaTenant {
   }
 }
 
+function Invoke-TazamaE2e {
+  $kubectl = Resolve-RequiredBin -Name "kubectl" -Hint "Install https://kubernetes.io/docs/tasks/tools/ and retry."
+  $newman = Resolve-RequiredBin -Name "newman" -Hint "Install Newman: npm install -g newman"
+  $postmanRoot = Resolve-TazamaPostmanRoot
+  $envFile = Join-Path $postmanRoot "environments\Tazama-Docker-Compose.postman_environment.json"
+  $authCollection = Join-Path $postmanRoot "Newman\Newman - 4.1. (AUTH) Public GitHub End-to-End test - tenant-001.postman_collection.json"
+  $noAuthCollection = Join-Path $postmanRoot "Newman\Newman - 2.1. (NO-AUTH) Public DockerHub End-to-End Test.postman_collection.json"
+
+  $collectionFile = if (-not [string]::IsNullOrWhiteSpace($Collection)) {
+    if ([System.IO.Path]::IsPathRooted($Collection) -or (Test-Path -LiteralPath $Collection)) {
+      $Collection
+    } else {
+      Join-Path $postmanRoot $Collection
+    }
+  } elseif ($SkipAuth) {
+    $noAuthCollection
+  } else {
+    $authCollection
+  }
+  if (-not (Test-Path -LiteralPath $collectionFile)) {
+    Write-Error "Collection not found: $collectionFile"
+  }
+
+  $tmsHp = Get-TazamaNewmanHost -Url $(if ($TmsUrl) { $TmsUrl } else { "localhost:3000" }) -DefaultPort 3000
+  $adminHp = Get-TazamaNewmanHost -Url $(if ($AdminUrl) { $AdminUrl } elseif ($env:ADMIN_URL) { $env:ADMIN_URL } else { "localhost:5100" }) -DefaultPort 5100
+  $authHp = Get-TazamaNewmanHost -Url $(if ($AuthUrl) { $AuthUrl } else { "localhost:3020" }) -DefaultPort 3020
+  $kcHp = Get-TazamaNewmanHost -Url $(if ($KeycloakUrl) { $KeycloakUrl } else { "localhost:8080" }) -DefaultPort 8080
+  $tmsPort = Get-TazamaHostPortNumber $tmsHp 3000
+  $adminPort = Get-TazamaHostPortNumber $adminHp 5100
+  $authPort = Get-TazamaHostPortNumber $authHp 3020
+  $kcPort = Get-TazamaHostPortNumber $kcHp 8080
+
+  $forwards = New-Object System.Collections.Generic.List[System.Diagnostics.Process]
+  Write-Host "Running Postman end-to-end from $postmanRoot"
+  Write-Host "Collection: $collectionFile"
+  Write-Host "TMS=$tmsHp (Helm is 3000; Docker Compose env file still says 5000)"
+  Write-Host "admin=$adminHp auth=$authHp keycloak=$kcHp"
+  if (-not $SkipAuth) {
+    Write-Host "Unauthenticated POSTs to TMS return 401 when AUTHENTICATION is on; that is expected."
+  }
+
+  try {
+    if (Test-TazamaLocalHostName (Get-TazamaHostName $tmsHp)) {
+      Write-Host "Port-forwarding svc/tms-service ${tmsPort}:${tmsPort} ..."
+      [void]$forwards.Add((Start-TazamaPortForward -Kubectl $kubectl -Service "tms-service" -Port $tmsPort))
+    }
+    if (Test-TazamaLocalHostName (Get-TazamaHostName $adminHp)) {
+      Write-Host "Port-forwarding svc/admin-service ${adminPort}:${adminPort} ..."
+      [void]$forwards.Add((Start-TazamaPortForward -Kubectl $kubectl -Service "admin-service" -Port $adminPort))
+    }
+    if (-not $SkipAuth) {
+      if (Test-TazamaLocalHostName (Get-TazamaHostName $authHp)) {
+        Write-Host "Port-forwarding svc/auth-service ${authPort}:${authPort} ..."
+        [void]$forwards.Add((Start-TazamaPortForward -Kubectl $kubectl -Service "auth-service" -Port $authPort))
+      }
+      if (Test-TazamaLocalHostName (Get-TazamaHostName $kcHp)) {
+        Write-Host "Port-forwarding svc/keycloak ${kcPort}:${kcPort} ..."
+        [void]$forwards.Add((Start-TazamaPortForward -Kubectl $kubectl -Service "keycloak" -Port $kcPort))
+      }
+    }
+
+    Write-Host "Running Newman..."
+    & $newman run $collectionFile -e $envFile `
+      --env-var "tazamaTMSUrl=$tmsHp" `
+      --env-var "tazamaAdminUrl=$adminHp" `
+      --env-var "tazamaAuthUrl=$authHp" `
+      --env-var "keycloakUrl=$kcHp" `
+      --timeout-request 120000 `
+      --delay-request 500
+    if ($LASTEXITCODE -ne 0) {
+      Write-Error "Newman exited $LASTEXITCODE."
+    }
+    Write-Host "E2E collection completed."
+  } finally {
+    foreach ($proc in $forwards) {
+      if ($proc -and -not $proc.HasExited) {
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+      }
+    }
+  }
+}
+
 Ensure-TazamaPasswords -Path $secretsPath -Force:$GenerateSecrets
 Ensure-TazamaAuthKeys -Path $secretsPath -Force:$GenerateSecrets
 
@@ -608,6 +763,11 @@ if ($Command -eq "configure") {
 
 if ($Command -eq "tenant") {
   Invoke-TazamaTenant
+  exit 0
+}
+
+if ($Command -eq "e2e") {
+  Invoke-TazamaE2e
   exit 0
 }
 
